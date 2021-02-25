@@ -1,3 +1,7 @@
+[![GitHub CI](https://github.com/jedisct1/rust-blind-rsa-signatures/workflows/Rust/badge.svg)](https://github.com/jedisct1/rust-blind-rsa-signatures/actions)
+[![Docs.rs](https://docs.rs/blind-rsa-signatures/badge.svg)](https://docs.rs/blind-rsa-signatures/)
+[![crates.io](https://img.shields.io/crates/v/blind-rsa-signatures.svg)](https://crates.io/crates/blind-rsa-signatures)
+
 # Blind RSA signatures
 
 Author-blinded RSASSA-PSS RSAE signatures.
