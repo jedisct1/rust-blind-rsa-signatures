@@ -1,0 +1,18 @@
+[package]
+name = "rust-blind-rsa-signatures"
+version = "0.1.0"
+authors = ["Frank Denis <github@pureftpd.org>"]
+edition = "2018"
+description = "RSA blind signatures in pure Rust"
+readme = "README.md"
+keywords = ["crypto", "rsa", "blind", "signatures"]
+homepage = "https://github.com/jedisct1/rust-blind-rsa-signatures"
+repository = "https://github.com/jedisct1/rust-blind-rsa-signatures"
+categories = ["no-std", "cryptography"]
+
+[dependencies]
+rand = "0.7"
+rsa = { version = "0.3", features = ["expose-internals"] }
+digest = "0.9"
+hmac-sha512 = { version = "0.1", features = ["traits", "sha384"] }
+
