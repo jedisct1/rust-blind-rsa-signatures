@@ -9,6 +9,7 @@ keywords = ["crypto", "rsa", "blind", "signatures"]
 homepage = "https://github.com/jedisct1/rust-blind-rsa-signatures"
 repository = "https://github.com/jedisct1/rust-blind-rsa-signatures"
 categories = ["no-std", "cryptography"]
+license = "MIT"
 
 [dependencies]
 rand = "0.7"
