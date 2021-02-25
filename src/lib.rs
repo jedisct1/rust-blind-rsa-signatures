@@ -6,6 +6,10 @@ use rsa::internals as rsa_internals;
 use rsa::{BigUint, PaddingScheme, PublicKey as _, PublicKeyParts, RSAPrivateKey, RSAPublicKey};
 use std::fmt::{self, Display};
 
+pub mod reexports {
+    pub use {digest, hmac_sha512, rand, rsa};
+}
+
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Error {
     InternalError,
