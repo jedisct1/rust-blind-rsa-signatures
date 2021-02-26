@@ -52,7 +52,7 @@ The scheme was designed by David Chaum, and was originally implemented for anony
     let sig = pk.finalize(&blind_sig, &blinding_result.secret, &msg)?;
 
     // [SERVER]: a non-blind signature can be verified using the server's public key.
-    sig.verify(&pk, msg)
+    sig.verify(&pk, msg)?
 ```
 
 This crate also includes utility functions to import and export keys.
