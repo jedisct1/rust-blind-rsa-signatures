@@ -56,3 +56,8 @@ The scheme was designed by David Chaum, and was originally implemented for anony
 ```
 
 This crate also includes utility functions to import and export keys.
+
+## Rewrites in other languages
+
+* [Zig](https://github.com/jedisct1/zig-blind-rsa-signatures)
+* [C](https://github.com/jedisct1/blind-rsa-signatures)
