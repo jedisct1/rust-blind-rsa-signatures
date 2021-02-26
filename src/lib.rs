@@ -160,10 +160,28 @@ impl PublicKey {
         self.as_ref().as_pkcs8().map_err(|_| Error::EncodingError)
     }
 
-    pub fn from_der(&self, der: &[u8]) -> Result<Self, Error> {
-        Ok(RSAPublicKey::from_pkcs8(&der)
-            .map_err(|_| Error::EncodingError)?
-            .into())
+    fn check_rsa_parameters(&self) -> Result<(), Error> {
+        let pk = self.as_ref();
+        let modulus_bits = pk.size() * 8;
+        if !(2048..4096).contains(&modulus_bits) {
+            return Err(Error::UnsupportedParameters);
+        }
+        let e = pk.e();
+        let e3 = BigUint::from(3u32);
+        let ef4 = BigUint::from(65537u32);
+        if ![e3, ef4].contains(e) {
+            return Err(Error::UnsupportedParameters);
+        }
+        Ok(())
+    }
+
+    pub fn from_der(der: &[u8]) -> Result<Self, Error> {
+        if der.len() > 800 {
+            return Err(Error::EncodingError);
+        }
+        let pk = PublicKey(RSAPublicKey::from_pkcs8(&der).map_err(|_| Error::EncodingError)?);
+        pk.check_rsa_parameters()?;
+        Ok(pk)
     }
 
     pub fn to_pem(&self) -> Result<String, Error> {
@@ -172,7 +190,10 @@ impl PublicKey {
             .map_err(|_| Error::EncodingError)
     }
 
-    pub fn from_pem(&self, pem: &str) -> Result<Self, Error> {
+    pub fn from_pem(pem: &str) -> Result<Self, Error> {
+        if pem.len() > 1000 {
+            return Err(Error::EncodingError);
+        }
         let parsed_pem = ::rsa::pem::parse(pem).map_err(|_| Error::EncodingError)?;
         Ok(RSAPublicKey::try_from(parsed_pem)
             .map_err(|_| Error::EncodingError)?
@@ -242,7 +263,7 @@ impl SecretKey {
         self.as_ref().as_pkcs8().map_err(|_| Error::EncodingError)
     }
 
-    pub fn from_der(&self, der: &[u8]) -> Result<Self, Error> {
+    pub fn from_der(der: &[u8]) -> Result<Self, Error> {
         let mut sk = RSAPrivateKey::from_pkcs8(&der).map_err(|_| Error::EncodingError)?;
         sk.validate().map_err(|_| Error::InvalidKey)?;
         sk.precompute().map_err(|_| Error::InvalidKey)?;
@@ -255,7 +276,7 @@ impl SecretKey {
             .map_err(|_| Error::EncodingError)
     }
 
-    pub fn from_pem(&self, pem: &str) -> Result<Self, Error> {
+    pub fn from_pem(pem: &str) -> Result<Self, Error> {
         let parsed_pem = ::rsa::pem::parse(pem).map_err(|_| Error::EncodingError)?;
         let mut sk = RSAPrivateKey::try_from(parsed_pem).map_err(|_| Error::EncodingError)?;
         sk.validate().map_err(|_| Error::InvalidKey)?;
