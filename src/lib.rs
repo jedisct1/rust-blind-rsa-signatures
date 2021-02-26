@@ -8,7 +8,11 @@ use hmac_sha512::sha384::Hash;
 use rand::Rng;
 use rsa::algorithms::mgf1_xor;
 use rsa::internals as rsa_internals;
-use rsa::{BigUint, PaddingScheme, PublicKey as _, PublicKeyParts, RSAPrivateKey, RSAPublicKey};
+use rsa::{
+    BigUint, PaddingScheme, PublicKey as _, PublicKeyParts as _, RSAPrivateKey, RSAPublicKey,
+};
+use rsa_export::{Encode as _, PemEncode as _};
+use std::convert::TryFrom;
 use std::fmt::{self, Display};
 
 pub mod reexports {
@@ -20,6 +24,8 @@ pub enum Error {
     InternalError,
     UnsupportedParameters,
     VerificationFailed,
+    EncodingError,
+    InvalidKey,
 }
 
 impl std::error::Error for Error {}
@@ -30,6 +36,8 @@ impl Display for Error {
             Error::InternalError => write!(f, "Internal Error"),
             Error::UnsupportedParameters => write!(f, "Unsupported parameters"),
             Error::VerificationFailed => write!(f, "Verification failed"),
+            Error::EncodingError => write!(f, "Encoding error"),
+            Error::InvalidKey => write!(f, "Invalid key"),
         }
     }
 }
@@ -99,13 +107,12 @@ impl KeyPair {
     /// Generate a new key pair
     pub fn generate(modulus_bits: usize) -> Result<KeyPair, Error> {
         let mut rng = rand::thread_rng();
-        let sk =
+        let mut sk =
             RSAPrivateKey::new(&mut rng, modulus_bits).map_err(|_| Error::UnsupportedParameters)?;
-        let pk = RSAPublicKey::from(&sk);
-        Ok(KeyPair {
-            sk: sk.into(),
-            pk: pk.into(),
-        })
+        sk.precompute().map_err(|_| Error::InternalError)?;
+        let sk = SecretKey(sk);
+        let pk = sk.public_key()?;
+        Ok(KeyPair { sk, pk })
     }
 }
 
@@ -149,6 +156,29 @@ fn emsa_pss_encode(
 }
 
 impl PublicKey {
+    pub fn to_der(&self) -> Result<Vec<u8>, Error> {
+        self.as_ref().as_pkcs8().map_err(|_| Error::EncodingError)
+    }
+
+    pub fn from_der(&self, der: &[u8]) -> Result<Self, Error> {
+        Ok(RSAPublicKey::from_pkcs8(&der)
+            .map_err(|_| Error::EncodingError)?
+            .into())
+    }
+
+    pub fn to_pem(&self) -> Result<String, Error> {
+        self.as_ref()
+            .as_pkcs8_pem()
+            .map_err(|_| Error::EncodingError)
+    }
+
+    pub fn from_pem(&self, pem: &str) -> Result<Self, Error> {
+        let parsed_pem = ::rsa::pem::parse(pem).map_err(|_| Error::EncodingError)?;
+        Ok(RSAPublicKey::try_from(parsed_pem)
+            .map_err(|_| Error::EncodingError)?
+            .into())
+    }
+
     /// Blind a message to be signed
     pub fn blind(&self, msg: impl AsRef<[u8]>) -> Result<BlindingResult, Error> {
         let mut rng = rand::thread_rng();
@@ -208,6 +238,35 @@ impl PublicKey {
 }
 
 impl SecretKey {
+    pub fn to_der(&self) -> Result<Vec<u8>, Error> {
+        self.as_ref().as_pkcs8().map_err(|_| Error::EncodingError)
+    }
+
+    pub fn from_der(&self, der: &[u8]) -> Result<Self, Error> {
+        let mut sk = RSAPrivateKey::from_pkcs8(&der).map_err(|_| Error::EncodingError)?;
+        sk.validate().map_err(|_| Error::InvalidKey)?;
+        sk.precompute().map_err(|_| Error::InvalidKey)?;
+        Ok(SecretKey(sk))
+    }
+
+    pub fn to_pem(&self) -> Result<String, Error> {
+        self.as_ref()
+            .as_pkcs8_pem()
+            .map_err(|_| Error::EncodingError)
+    }
+
+    pub fn from_pem(&self, pem: &str) -> Result<Self, Error> {
+        let parsed_pem = ::rsa::pem::parse(pem).map_err(|_| Error::EncodingError)?;
+        let mut sk = RSAPrivateKey::try_from(parsed_pem).map_err(|_| Error::EncodingError)?;
+        sk.validate().map_err(|_| Error::InvalidKey)?;
+        sk.precompute().map_err(|_| Error::InvalidKey)?;
+        Ok(SecretKey(sk))
+    }
+
+    pub fn public_key(&self) -> Result<PublicKey, Error> {
+        Ok(PublicKey(RSAPublicKey::from(self.as_ref())))
+    }
+
     /// Sign a blinded message
     pub fn blind_sign(&self, blind_msg: impl AsRef<[u8]>) -> Result<BlindSignature, Error> {
         let modulus_bytes = self.0.size();
