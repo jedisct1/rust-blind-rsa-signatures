@@ -1,3 +1,8 @@
+#[macro_use]
+extern crate shrinkwraprs;
+#[macro_use]
+extern crate derive_new;
+
 use digest::DynDigest;
 use hmac_sha512::sha384::Hash;
 use rand::Rng;
@@ -29,39 +34,39 @@ impl Display for Error {
     }
 }
 /// An RSA public key
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Shrinkwrap, new)]
 #[repr(transparent)]
 pub struct PublicKey(pub RSAPublicKey);
 
 /// An RSA secret key
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Shrinkwrap, new)]
 #[repr(transparent)]
 pub struct SecretKey(pub RSAPrivateKey);
 
 /// An RSA key pair
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, new)]
 pub struct KeyPair {
     pub pk: PublicKey,
     pub sk: SecretKey,
 }
 
 /// A blinding secret factor
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Shrinkwrap, new)]
 #[repr(transparent)]
 pub struct Secret(pub Vec<u8>);
 
 /// A blinded message
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Shrinkwrap, new)]
 #[repr(transparent)]
 pub struct BlindedMessage(pub Vec<u8>);
 
 /// A blind signature
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Shrinkwrap)]
 #[repr(transparent)]
 pub struct BlindSignature(pub Vec<u8>);
 
 /// A (non-blind) signature
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Shrinkwrap, new)]
 #[repr(transparent)]
 pub struct Signature(pub Vec<u8>);
 
@@ -70,12 +75,6 @@ pub struct Signature(pub Vec<u8>);
 pub struct BlindingResult {
     pub blind_msg: BlindedMessage,
     pub secret: Secret,
-}
-
-impl AsRef<RSAPublicKey> for PublicKey {
-    fn as_ref(&self) -> &RSAPublicKey {
-        &self.0
-    }
 }
 
 impl From<RSAPublicKey> for PublicKey {
@@ -90,12 +89,6 @@ impl From<PublicKey> for RSAPublicKey {
     }
 }
 
-impl AsRef<RSAPrivateKey> for SecretKey {
-    fn as_ref(&self) -> &RSAPrivateKey {
-        &self.0
-    }
-}
-
 impl From<RSAPrivateKey> for SecretKey {
     fn from(sk: RSAPrivateKey) -> Self {
         Self(sk)
@@ -105,12 +98,6 @@ impl From<RSAPrivateKey> for SecretKey {
 impl From<SecretKey> for RSAPrivateKey {
     fn from(sk: SecretKey) -> RSAPrivateKey {
         sk.0
-    }
-}
-
-impl AsRef<[u8]> for Secret {
-    fn as_ref(&self) -> &[u8] {
-        self.0.as_slice()
     }
 }
 
@@ -132,21 +119,9 @@ impl From<Vec<u8>> for BlindedMessage {
     }
 }
 
-impl AsRef<[u8]> for BlindSignature {
-    fn as_ref(&self) -> &[u8] {
-        self.0.as_slice()
-    }
-}
-
 impl From<Vec<u8>> for BlindSignature {
     fn from(v: Vec<u8>) -> Self {
         Self(v)
-    }
-}
-
-impl AsRef<[u8]> for Signature {
-    fn as_ref(&self) -> &[u8] {
-        self.0.as_slice()
     }
 }
 
