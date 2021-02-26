@@ -29,12 +29,30 @@ The scheme was designed by David Chaum, and was originally implemented for anony
 ## Usage
 
 ```rust
-let kp = KeyPair::generate(2048)?;
-let (pk, sk) = (kp.pk, kp.sk);
+    // [SERVER]: Generate a RSA-2048 key pair
+    let kp = KeyPair::generate(2048)?;
+    let (pk, sk) = (kp.pk, kp.sk);
 
-let msg = b"test";
-let blinding_result = pk.blind(msg)?;
-let blind_sig = sk.blind_sign(&blinding_result.blind_msg)?;
-let sig = pk.finalize(&blind_sig, &blinding_result.secret, &msg)?;
-sig.verify(&pk, msg)?;
+    // [CLIENT]: create a random message and blind it for the server whose public key is `pk`.
+    // The client must store the message and the secret.
+    let msg = b"test";
+    let blinding_result = pk.blind(msg)?;
+
+    // [SERVER]: compute a signature for a blind message, to be sent to the client.
+    // THe client secret should not be sent to the server.
+    let blind_sig = sk.blind_sign(&blinding_result.blind_msg)?;
+
+    // [CLIENT]: later, when the client wants to redeem a signed blind message,
+    // using the blinding secret, it can locally compute the signature of the
+    // original message.
+    // The client then owns a new valid (message, signature) pair, and the
+    // server cannot link it to a previous(blinded message, blind signature) pair.
+    // Note that the finalization function also verifies that the new signature
+    // is correct for the server public key.
+    let sig = pk.finalize(&blind_sig, &blinding_result.secret, &msg)?;
+
+    // [SERVER]: a non-blind signature can be verified using the server's public key.
+    sig.verify(&pk, msg)
 ```
+
+This crate also includes utility functions to import and export keys.
