@@ -35,12 +35,10 @@ impl Display for Error {
 }
 /// An RSA public key
 #[derive(Clone, Debug, Eq, PartialEq, Shrinkwrap, new)]
-#[repr(transparent)]
 pub struct PublicKey(pub RSAPublicKey);
 
 /// An RSA secret key
 #[derive(Clone, Debug, Shrinkwrap, new)]
-#[repr(transparent)]
 pub struct SecretKey(pub RSAPrivateKey);
 
 /// An RSA key pair
@@ -52,22 +50,18 @@ pub struct KeyPair {
 
 /// A blinding secret factor
 #[derive(Clone, Debug, Shrinkwrap, new)]
-#[repr(transparent)]
 pub struct Secret(pub Vec<u8>);
 
 /// A blinded message
 #[derive(Clone, Debug, Shrinkwrap, new)]
-#[repr(transparent)]
 pub struct BlindedMessage(pub Vec<u8>);
 
 /// A blind signature
 #[derive(Clone, Debug, Shrinkwrap)]
-#[repr(transparent)]
 pub struct BlindSignature(pub Vec<u8>);
 
 /// A (non-blind) signature
 #[derive(Clone, Debug, Shrinkwrap, new)]
-#[repr(transparent)]
 pub struct Signature(pub Vec<u8>);
 
 /// Result of a blinding operation
