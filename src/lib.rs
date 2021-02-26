@@ -210,11 +210,11 @@ impl PublicKey {
         msg: impl AsRef<[u8]>,
     ) -> Result<Signature, Error> {
         let modulus_bytes = self.0.size();
-        if blind_sig.as_ref().len() != modulus_bytes || secret.as_ref().len() != modulus_bytes {
+        if blind_sig.len() != modulus_bytes || secret.len() != modulus_bytes {
             return Err(Error::UnsupportedParameters);
         }
-        let blind_sig = BigUint::from_bytes_be(blind_sig.as_ref());
-        let secret = BigUint::from_bytes_be(secret.as_ref());
+        let blind_sig = BigUint::from_bytes_be(blind_sig);
+        let secret = BigUint::from_bytes_be(secret);
         let sig =
             Signature(rsa_internals::unblind(self.as_ref(), &blind_sig, &secret).to_bytes_be());
         self.verify(&sig, msg)?;
@@ -224,14 +224,14 @@ impl PublicKey {
     /// Verify a (non-blind) signature
     pub fn verify(&self, sig: &Signature, msg: impl AsRef<[u8]>) -> Result<(), Error> {
         let modulus_bytes = self.0.size();
-        if sig.as_ref().len() != modulus_bytes {
+        if sig.len() != modulus_bytes {
             return Err(Error::UnsupportedParameters);
         }
         let rng = rand::thread_rng();
         let msg_hash = Hash::hash(msg);
         let ps = PaddingScheme::new_pss::<Hash, _>(rng);
         self.as_ref()
-            .verify(ps, &msg_hash, sig.as_ref())
+            .verify(ps, &msg_hash, sig)
             .map_err(|_| Error::VerificationFailed)?;
         Ok(())
     }
