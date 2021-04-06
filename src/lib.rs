@@ -43,9 +43,10 @@ use rand::Rng;
 use rsa::algorithms::mgf1_xor;
 use rsa::internals as rsa_internals;
 use rsa::{
-    BigUint, PaddingScheme, PublicKey as _, PublicKeyParts as _, RSAPrivateKey, RSAPublicKey,
+    BigUint, PaddingScheme, PrivateKeyEncoding as _, PrivateKeyPemEncoding as _, PublicKey as _,
+    PublicKeyEncoding as _, PublicKeyParts as _, PublicKeyPemEncoding as _, RSAPrivateKey,
+    RSAPublicKey,
 };
-use rsa_export::{Encode as _, PemEncode as _};
 use std::convert::TryFrom;
 use std::fmt::{self, Display};
 
@@ -191,7 +192,7 @@ fn emsa_pss_encode(
 
 impl PublicKey {
     pub fn to_der(&self) -> Result<Vec<u8>, Error> {
-        self.as_ref().as_pkcs8().map_err(|_| Error::EncodingError)
+        self.as_ref().to_pkcs8().map_err(|_| Error::EncodingError)
     }
 
     fn check_rsa_parameters(&self) -> Result<(), Error> {
@@ -220,7 +221,7 @@ impl PublicKey {
 
     pub fn to_pem(&self) -> Result<String, Error> {
         self.as_ref()
-            .as_pkcs8_pem()
+            .to_pem_pkcs8()
             .map_err(|_| Error::EncodingError)
     }
 
@@ -294,7 +295,7 @@ impl PublicKey {
 
 impl SecretKey {
     pub fn to_der(&self) -> Result<Vec<u8>, Error> {
-        self.as_ref().as_pkcs8().map_err(|_| Error::EncodingError)
+        self.as_ref().to_pkcs8().map_err(|_| Error::EncodingError)
     }
 
     pub fn from_der(der: &[u8]) -> Result<Self, Error> {
@@ -306,7 +307,7 @@ impl SecretKey {
 
     pub fn to_pem(&self) -> Result<String, Error> {
         self.as_ref()
-            .as_pkcs8_pem()
+            .to_pem_pkcs8()
             .map_err(|_| Error::EncodingError)
     }
 
