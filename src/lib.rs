@@ -154,7 +154,7 @@ impl KeyPair {
 impl Signature {
     /// Verify that the (non-blind) signature is valid for the given public key and original message
     pub fn verify(&self, pk: &PublicKey, msg: impl AsRef<[u8]>) -> Result<(), Error> {
-        pk.verify(&self, msg)
+        pk.verify(self, msg)
     }
 }
 
@@ -184,7 +184,7 @@ fn emsa_pss_encode(
     h.copy_from_slice(&hashed);
     db[em_len - s_len - h_len - 2] = 0x01;
     db[em_len - s_len - h_len - 1..].copy_from_slice(salt);
-    mgf1_xor(db, hash, &h);
+    mgf1_xor(db, hash, h);
     db[0] &= 0xFF >> (8 * em_len - em_bits);
     em[em_len - 1] = 0xBC;
     Ok(em)
@@ -214,7 +214,7 @@ impl PublicKey {
         if der.len() > 800 {
             return Err(Error::EncodingError);
         }
-        let pk = PublicKey(RSAPublicKey::from_pkcs8(&der).map_err(|_| Error::EncodingError)?);
+        let pk = PublicKey(RSAPublicKey::from_pkcs8(der).map_err(|_| Error::EncodingError)?);
         pk.check_rsa_parameters()?;
         Ok(pk)
     }
@@ -299,7 +299,7 @@ impl SecretKey {
     }
 
     pub fn from_der(der: &[u8]) -> Result<Self, Error> {
-        let mut sk = RSAPrivateKey::from_pkcs8(&der).map_err(|_| Error::EncodingError)?;
+        let mut sk = RSAPrivateKey::from_pkcs8(der).map_err(|_| Error::EncodingError)?;
         sk.validate().map_err(|_| Error::InvalidKey)?;
         sk.precompute().map_err(|_| Error::InvalidKey)?;
         Ok(SecretKey(sk))
