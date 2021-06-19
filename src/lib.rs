@@ -38,8 +38,10 @@
 extern crate derive_new;
 
 use derive_more::*;
-
 use digest::DynDigest;
+use hmac_sha256::Hash as Sha256;
+use hmac_sha512::sha384::Hash as Sha384;
+use hmac_sha512::Hash as Sha512;
 use rand::Rng;
 use rsa::algorithms::mgf1_xor;
 use rsa::internals as rsa_internals;
@@ -102,7 +104,7 @@ impl Default for Options {
         Options {
             hash: Hash::Sha384,
             deterministic: false,
-            salt_len: 48,
+            salt_len: hmac_sha512::sha384::Hash::new().output_size(),
         }
     }
 }
@@ -288,33 +290,24 @@ impl PublicKey {
         let modulus_bytes = self.0.size();
         let modulus_bits = modulus_bytes * 8;
         let msg_hash = match options.hash {
-            Hash::Sha256 => hmac_sha256::Hash::hash(msg).to_vec(),
-            Hash::Sha384 => hmac_sha512::sha384::Hash::hash(msg).to_vec(),
-            Hash::Sha512 => hmac_sha512::Hash::hash(msg).to_vec(),
+            Hash::Sha256 => Sha256::hash(msg).to_vec(),
+            Hash::Sha384 => Sha384::hash(msg).to_vec(),
+            Hash::Sha512 => Sha512::hash(msg).to_vec(),
         };
         let salt_len = options.salt_len();
         let mut salt = vec![0u8; salt_len];
         rng.fill(&mut salt[..]);
 
         let padded = match options.hash {
-            Hash::Sha256 => emsa_pss_encode(
-                &msg_hash,
-                modulus_bits - 1,
-                &salt,
-                &mut hmac_sha256::Hash::new(),
-            )?,
-            Hash::Sha384 => emsa_pss_encode(
-                &msg_hash,
-                modulus_bits - 1,
-                &salt,
-                &mut hmac_sha512::sha384::Hash::new(),
-            )?,
-            Hash::Sha512 => emsa_pss_encode(
-                &msg_hash,
-                modulus_bits - 1,
-                &salt,
-                &mut hmac_sha512::Hash::new(),
-            )?,
+            Hash::Sha256 => {
+                emsa_pss_encode(&msg_hash, modulus_bits - 1, &salt, &mut Sha256::new())?
+            }
+            Hash::Sha384 => {
+                emsa_pss_encode(&msg_hash, modulus_bits - 1, &salt, &mut Sha384::new())?
+            }
+            Hash::Sha512 => {
+                emsa_pss_encode(&msg_hash, modulus_bits - 1, &salt, &mut Sha512::new())?
+            }
         };
         let m = BigUint::from_bytes_be(&padded);
 
@@ -360,15 +353,15 @@ impl PublicKey {
         let rng = rand::thread_rng();
         let (msg_hash, ps) = match options.hash {
             Hash::Sha256 => (
-                hmac_sha256::Hash::hash(msg).to_vec(),
+                Sha256::hash(msg).to_vec(),
                 PaddingScheme::new_pss::<hmac_sha256::Hash, _>(rng),
             ),
             Hash::Sha384 => (
-                hmac_sha512::sha384::Hash::hash(msg).to_vec(),
+                Sha384::hash(msg).to_vec(),
                 PaddingScheme::new_pss::<hmac_sha512::sha384::Hash, _>(rng),
             ),
             Hash::Sha512 => (
-                hmac_sha512::sha384::Hash::hash(msg).to_vec(),
+                Sha512::hash(msg).to_vec(),
                 PaddingScheme::new_pss::<hmac_sha512::Hash, _>(rng),
             ),
         };
