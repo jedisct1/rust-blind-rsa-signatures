@@ -18,7 +18,7 @@
 //!
 //! // [SERVER]: compute a signature for a blind message, to be sent to the client.
 //! // THe client secret should not be sent to the server.
-//! let blind_sig = sk.blind_sign(&blinding_result.blind_msg)?;
+//! let blind_sig = sk.blind_sign(&blinding_result.blind_msg, &options)?;
 //!
 //! // [CLIENT]: later, when the client wants to redeem a signed blind message,
 //! // using the blinding secret, it can locally compute the signature of the
@@ -403,7 +403,11 @@ impl SecretKey {
     }
 
     /// Sign a blinded message
-    pub fn blind_sign(&self, blind_msg: impl AsRef<[u8]>) -> Result<BlindSignature, Error> {
+    pub fn blind_sign(
+        &self,
+        blind_msg: impl AsRef<[u8]>,
+        _options: &Options,
+    ) -> Result<BlindSignature, Error> {
         let modulus_bytes = self.0.size();
         if blind_msg.as_ref().len() != modulus_bytes {
             return Err(Error::UnsupportedParameters);
