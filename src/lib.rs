@@ -3,7 +3,9 @@
 //! This is an implementation of the [RSA Blind Signatures](https://chris-wood.github.io/draft-wood-cfrg-blind-signatures/draft-wood-cfrg-rsa-blind-signatures.html) proposal, based on [the Zig implementation](https://github.com/jedisct1/zig-rsa-blind-signatures).
 //!
 //! ```rust
-//! use blind_rsa_signatures::KeyPair;
+//! use blind_rsa_signatures::{KeyPair, Options};
+//!
+//! let options = Options::default();
 //!
 //! // [SERVER]: Generate a RSA-2048 key pair
 //! let kp = KeyPair::generate(2048)?;
@@ -12,7 +14,7 @@
 //! // [CLIENT]: create a random message and blind it for the server whose public key is `pk`.
 //! // The client must store the message and the secret.
 //! let msg = b"test";
-//! let blinding_result = pk.blind(msg)?;
+//! let blinding_result = pk.blind(msg, &options)?;
 //!
 //! // [SERVER]: compute a signature for a blind message, to be sent to the client.
 //! // THe client secret should not be sent to the server.
@@ -25,10 +27,10 @@
 //! // server cannot link it to a previous(blinded message, blind signature) pair.
 //! // Note that the finalization function also verifies that the new signature
 //! // is correct for the server public key.
-//! let sig = pk.finalize(&blind_sig, &blinding_result.secret, &msg)?;
+//! let sig = pk.finalize(&blind_sig, &blinding_result.secret, &msg, &options)?;
 //!
 //! // [SERVER]: a non-blind signature can be verified using the server's public key.
-//! sig.verify(&pk, msg)?;
+//! sig.verify(&pk, msg, &options)?;
 //! # Ok::<(), blind_rsa_signatures::Error>(())
 //! ```
 
@@ -38,7 +40,6 @@ extern crate derive_new;
 use derive_more::*;
 
 use digest::DynDigest;
-use hmac_sha512::sha384::Hash;
 use rand::Rng;
 use rsa::algorithms::mgf1_xor;
 use rsa::internals as rsa_internals;
@@ -76,6 +77,46 @@ impl Display for Error {
         }
     }
 }
+
+/// Hash function for padding and message hashing
+#[derive(Clone, Debug, Eq, PartialEq, From, new)]
+pub enum Hash {
+    Sha256,
+    Sha384,
+    Sha512,
+}
+
+/// Options
+#[derive(Clone, Debug, Eq, PartialEq, AsRef, From, Into, new)]
+pub struct Options {
+    /// Hash function to use for padding and for hashing the message
+    hash: Hash,
+    /// Use deterministic padding
+    deterministic: bool,
+    /// Salt length (ignored in deterministic mode)
+    salt_len: usize,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Options {
+            hash: Hash::Sha384,
+            deterministic: false,
+            salt_len: 48,
+        }
+    }
+}
+
+impl Options {
+    fn salt_len(&self) -> usize {
+        if self.deterministic {
+            0
+        } else {
+            self.salt_len
+        }
+    }
+}
+
 /// An RSA public key
 #[derive(Clone, Debug, Eq, PartialEq, AsRef, Deref, From, Into, new)]
 pub struct PublicKey(pub RSAPublicKey);
@@ -153,8 +194,13 @@ impl KeyPair {
 
 impl Signature {
     /// Verify that the (non-blind) signature is valid for the given public key and original message
-    pub fn verify(&self, pk: &PublicKey, msg: impl AsRef<[u8]>) -> Result<(), Error> {
-        pk.verify(self, msg)
+    pub fn verify(
+        &self,
+        pk: &PublicKey,
+        msg: impl AsRef<[u8]>,
+        options: &Options,
+    ) -> Result<(), Error> {
+        pk.verify(self, msg, options)
     }
 }
 
@@ -236,19 +282,40 @@ impl PublicKey {
     }
 
     /// Blind a message to be signed
-    pub fn blind(&self, msg: impl AsRef<[u8]>) -> Result<BlindingResult, Error> {
+    pub fn blind(&self, msg: impl AsRef<[u8]>, options: &Options) -> Result<BlindingResult, Error> {
+        let msg = msg.as_ref();
         let mut rng = rand::thread_rng();
         let modulus_bytes = self.0.size();
         let modulus_bits = modulus_bytes * 8;
-        let msg_hash = Hash::hash(msg);
-
-        let salt_len = msg_hash.len();
+        let msg_hash = match options.hash {
+            Hash::Sha256 => hmac_sha256::Hash::hash(msg).to_vec(),
+            Hash::Sha384 => hmac_sha512::sha384::Hash::hash(msg).to_vec(),
+            Hash::Sha512 => hmac_sha512::Hash::hash(msg).to_vec(),
+        };
+        let salt_len = options.salt_len();
         let mut salt = vec![0u8; salt_len];
         rng.fill(&mut salt[..]);
 
-        let mut hasher = Hash::default();
-        let padded = emsa_pss_encode(&msg_hash, modulus_bits - 1, &salt, &mut hasher)?;
-
+        let padded = match options.hash {
+            Hash::Sha256 => emsa_pss_encode(
+                &msg_hash,
+                modulus_bits - 1,
+                &salt,
+                &mut hmac_sha256::Hash::new(),
+            )?,
+            Hash::Sha384 => emsa_pss_encode(
+                &msg_hash,
+                modulus_bits - 1,
+                &salt,
+                &mut hmac_sha512::sha384::Hash::new(),
+            )?,
+            Hash::Sha512 => emsa_pss_encode(
+                &msg_hash,
+                modulus_bits - 1,
+                &salt,
+                &mut hmac_sha512::Hash::new(),
+            )?,
+        };
         let m = BigUint::from_bytes_be(&padded);
 
         let (blind_msg, secret) = rsa_internals::blind(&mut rng, self.as_ref(), &m);
@@ -264,6 +331,7 @@ impl PublicKey {
         blind_sig: &BlindSignature,
         secret: &Secret,
         msg: impl AsRef<[u8]>,
+        options: &Options,
     ) -> Result<Signature, Error> {
         let modulus_bytes = self.0.size();
         if blind_sig.len() != modulus_bytes || secret.len() != modulus_bytes {
@@ -273,21 +341,39 @@ impl PublicKey {
         let secret = BigUint::from_bytes_be(secret);
         let sig =
             Signature(rsa_internals::unblind(self.as_ref(), &blind_sig, &secret).to_bytes_be());
-        self.verify(&sig, msg)?;
+        self.verify(&sig, msg, options)?;
         Ok(sig)
     }
 
     /// Verify a (non-blind) signature
-    pub fn verify(&self, sig: &Signature, msg: impl AsRef<[u8]>) -> Result<(), Error> {
+    pub fn verify(
+        &self,
+        sig: &Signature,
+        msg: impl AsRef<[u8]>,
+        options: &Options,
+    ) -> Result<(), Error> {
+        let msg = msg.as_ref();
         let modulus_bytes = self.0.size();
         if sig.len() != modulus_bytes {
             return Err(Error::UnsupportedParameters);
         }
         let rng = rand::thread_rng();
-        let msg_hash = Hash::hash(msg);
-        let ps = PaddingScheme::new_pss::<Hash, _>(rng);
+        let (msg_hash, ps) = match options.hash {
+            Hash::Sha256 => (
+                hmac_sha256::Hash::hash(msg).to_vec(),
+                PaddingScheme::new_pss::<hmac_sha256::Hash, _>(rng),
+            ),
+            Hash::Sha384 => (
+                hmac_sha512::sha384::Hash::hash(msg).to_vec(),
+                PaddingScheme::new_pss::<hmac_sha512::sha384::Hash, _>(rng),
+            ),
+            Hash::Sha512 => (
+                hmac_sha512::sha384::Hash::hash(msg).to_vec(),
+                PaddingScheme::new_pss::<hmac_sha512::Hash, _>(rng),
+            ),
+        };
         self.as_ref()
-            .verify(ps, &msg_hash, sig)
+            .verify(ps, &msg_hash, sig) // salt length is ignored
             .map_err(|_| Error::VerificationFailed)?;
         Ok(())
     }
