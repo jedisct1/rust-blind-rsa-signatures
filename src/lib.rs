@@ -246,7 +246,7 @@ impl PublicKey {
     fn check_rsa_parameters(&self) -> Result<(), Error> {
         let pk = self.as_ref();
         let modulus_bits = pk.size() * 8;
-        if !(2048..4096).contains(&modulus_bits) {
+        if !(2048..=4096).contains(&modulus_bits) {
             return Err(Error::UnsupportedParameters);
         }
         let e = pk.e();
