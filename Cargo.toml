@@ -12,8 +12,8 @@ categories = ["cryptography"]
 license = "MIT"
 
 [dependencies]
-rand = "0.8.3"
-rsa = { version = "0.4.0", features = ["expose-internals"] }
+rand = "0.8"
+rsa = { version = "0.5", features = ["expose-internals"] }
 digest = "0.9"
 hmac-sha256 = { version = "0.1", features = ["traits"] }
 hmac-sha512 = { version = "0.1", features = ["traits", "sha384"] }
