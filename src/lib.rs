@@ -428,6 +428,9 @@ impl SecretKey {
         }
         let mut rng = rand::thread_rng();
         let blind_msg = BigUint::from_bytes_be(blind_msg.as_ref());
+        if &blind_msg >= self.0.n() {
+            return Err(Error::UnsupportedParameters);
+        }
         let blind_sig = rsa_internals::decrypt_and_check(Some(&mut rng), self.as_ref(), &blind_msg)
             .map_err(|_| Error::InternalError)?;
         Ok(BlindSignature(blind_sig.to_bytes_be()))
