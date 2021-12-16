@@ -51,6 +51,7 @@ use rsa::{
     BigUint, PaddingScheme, PublicKey as _, PublicKeyParts as _, RsaPrivateKey, RsaPublicKey,
 };
 use std::fmt::{self, Display};
+use std::iter;
 
 pub mod reexports {
     pub use {digest, hmac_sha512, rand, rsa};
@@ -237,6 +238,24 @@ fn emsa_pss_encode(
     Ok(em)
 }
 
+/// Pad `v` with leading zeroes up to the desired length.
+///
+/// This function can be used to left-pad the big-endian representation of a `BigUint` to a certain
+/// length. More specifically, when converting a vector of bytes to `BigUint` and applying some
+/// transformations, calling `to_bytes_be()` can unexpectedly result in a vector of bytes of a
+/// different length (because `to_bytes_be()` discards any leading zeroes). See this issue for more
+/// details: https://github.com/rust-num/num-bigint/issues/201
+fn zero_left_pad(v: Vec<u8>, len: usize) -> Vec<u8> {
+    if len > v.len() {
+        iter::repeat(0)
+            .take(len - v.len())
+            .chain(v.into_iter())
+            .collect()
+    } else {
+        v
+    }
+}
+
 impl PublicKey {
     pub fn to_der(&self) -> Result<Vec<u8>, Error> {
         self.as_ref()
@@ -319,9 +338,11 @@ impl PublicKey {
         let m = BigUint::from_bytes_be(&padded);
 
         let (blind_msg, secret) = rsa_internals::blind(&mut rng, self.as_ref(), &m);
+        let secret = secret.to_bytes_be();
+        let blind_msg = blind_msg.to_bytes_be();
         Ok(BlindingResult {
-            blind_msg: BlindedMessage(blind_msg.to_bytes_be()),
-            secret: Secret(secret.to_bytes_be()),
+            blind_msg: BlindedMessage(zero_left_pad(blind_msg, modulus_bytes)),
+            secret: Secret(zero_left_pad(secret, modulus_bytes)),
         })
     }
 
@@ -339,8 +360,8 @@ impl PublicKey {
         }
         let blind_sig = BigUint::from_bytes_be(blind_sig);
         let secret = BigUint::from_bytes_be(secret);
-        let sig =
-            Signature(rsa_internals::unblind(self.as_ref(), &blind_sig, &secret).to_bytes_be());
+        let sig = rsa_internals::unblind(self.as_ref(), &blind_sig, &secret).to_bytes_be();
+        let sig = Signature(zero_left_pad(sig, modulus_bytes));
         self.verify(&sig, msg, options)?;
         Ok(sig)
     }
@@ -432,7 +453,8 @@ impl SecretKey {
             return Err(Error::UnsupportedParameters);
         }
         let blind_sig = rsa_internals::decrypt_and_check(Some(&mut rng), self.as_ref(), &blind_msg)
-            .map_err(|_| Error::InternalError)?;
-        Ok(BlindSignature(blind_sig.to_bytes_be()))
+            .map_err(|_| Error::InternalError)?
+            .to_bytes_be();
+        Ok(BlindSignature(zero_left_pad(blind_sig, modulus_bytes)))
     }
 }
