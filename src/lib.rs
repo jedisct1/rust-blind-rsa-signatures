@@ -42,6 +42,7 @@ use digest::DynDigest;
 use hmac_sha256::Hash as Sha256;
 use hmac_sha512::sha384::Hash as Sha384;
 use hmac_sha512::Hash as Sha512;
+use num_padding::ToBytesPadded;
 use rand::Rng;
 use rsa::algorithms::mgf1_xor;
 use rsa::internals as rsa_internals;
@@ -55,6 +56,8 @@ use std::fmt::{self, Display};
 pub mod reexports {
     pub use {digest, hmac_sha512, rand, rsa};
 }
+
+mod num_padding;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Error {
@@ -320,8 +323,8 @@ impl PublicKey {
 
         let (blind_msg, secret) = rsa_internals::blind(&mut rng, self.as_ref(), &m);
         Ok(BlindingResult {
-            blind_msg: BlindedMessage(blind_msg.to_bytes_be()),
-            secret: Secret(secret.to_bytes_be()),
+            blind_msg: BlindedMessage(blind_msg.to_bytes_be_padded(modulus_bytes)),
+            secret: Secret(secret.to_bytes_be_padded(modulus_bytes)),
         })
     }
 
@@ -339,8 +342,10 @@ impl PublicKey {
         }
         let blind_sig = BigUint::from_bytes_be(blind_sig);
         let secret = BigUint::from_bytes_be(secret);
-        let sig =
-            Signature(rsa_internals::unblind(self.as_ref(), &blind_sig, &secret).to_bytes_be());
+        let sig = Signature(
+            rsa_internals::unblind(self.as_ref(), &blind_sig, &secret)
+                .to_bytes_be_padded(modulus_bytes),
+        );
         self.verify(&sig, msg, options)?;
         Ok(sig)
     }
@@ -433,6 +438,6 @@ impl SecretKey {
         }
         let blind_sig = rsa_internals::decrypt_and_check(Some(&mut rng), self.as_ref(), &blind_msg)
             .map_err(|_| Error::InternalError)?;
-        Ok(BlindSignature(blind_sig.to_bytes_be()))
+        Ok(BlindSignature(blind_sig.to_bytes_be_padded(modulus_bytes)))
     }
 }
