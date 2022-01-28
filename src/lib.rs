@@ -293,6 +293,111 @@ impl PublicKey {
             .into())
     }
 
+    pub fn to_spki(&self, options: &Options) -> Result<Vec<u8>, Error> {
+        const SEQ: u8 = 0x30;
+        const EXT: u8 = 0x80;
+        const CON: u8 = 0xa0;
+        const INT: u8 = 0x02;
+        const BIT: u8 = 0x03;
+        const OBJ: u8 = 0x06;
+        const TPL: &[u8] = &[
+            SEQ,
+            EXT | 2,
+            0,
+            0, // container length - offset 2
+            SEQ,
+            61, // Algorithm sequence
+            OBJ,
+            9,
+            0x2a,
+            0x86,
+            0x48,
+            0x86,
+            0xf7,
+            0x0d,
+            0x01,
+            0x01,
+            0x0a, // Signature algorithm (RSASSA-PSS)
+            SEQ,
+            48, // RSASSA-PSS parameters sequence
+            CON | 0,
+            2 + 2 + 9,
+            SEQ,
+            2 + 9,
+            OBJ,
+            9,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0, // Hash function - offset 21
+            CON | 1,
+            2 + 24,
+            SEQ,
+            24,
+            OBJ,
+            9,
+            0x2a,
+            0x86,
+            0x48,
+            0x86,
+            0xf7,
+            0x0d,
+            0x01,
+            0x01,
+            0x08, // Padding function (MGF1) and parameters
+            SEQ,
+            2 + 9,
+            OBJ,
+            9,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0, // MGF1 hash function - offset 49
+            CON | 2,
+            2 + 1,
+            INT,
+            1,
+            0, // Salt length - offset 66
+            BIT,
+            EXT | 2,
+            0,
+            0, // Public key length - Bit string - offset 69
+            0, // No partial bytes
+        ];
+        let raw = self.to_der()?;
+        if raw.len() < 24 {
+            return Err(Error::EncodingError);
+        }
+        let raw = &raw[24..];
+        let container_len = TPL.len() - 4 + raw.len();
+        let out_len = TPL.len() + raw.len();
+        let mut out = Vec::with_capacity(out_len);
+        out.extend_from_slice(TPL);
+        out.extend_from_slice(raw);
+        out[2..4].copy_from_slice(&(container_len as u16).to_be_bytes());
+        out[66] = options.salt_len() as u8;
+        out[69..71].copy_from_slice(&(1 + raw.len() as u16).to_be_bytes());
+        let mut mgf1_s: [u8; 13] = [48, 11, 6, 9, 96, 134, 72, 1, 101, 3, 4, 2, 0];
+        mgf1_s[12] = match options.hash {
+            Hash::Sha256 => 1,
+            Hash::Sha384 => 2,
+            Hash::Sha512 => 3,
+        };
+        out[21..][..mgf1_s.len()].copy_from_slice(&mgf1_s);
+        out[49..][..mgf1_s.len()].copy_from_slice(&mgf1_s);
+        Ok(out)
+    }
+
     /// Blind a message to be signed
     pub fn blind(&self, msg: impl AsRef<[u8]>, options: &Options) -> Result<BlindingResult, Error> {
         let msg = msg.as_ref();
