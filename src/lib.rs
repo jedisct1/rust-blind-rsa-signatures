@@ -376,11 +376,11 @@ impl PublicKey {
             0, // Public key length - Bit string - offset 69
             0, // No partial bytes
         ];
-        let raw = self.to_der()?;
-        if raw.len() < 24 {
+        let der = self.to_der()?;
+        if der.len() < 24 {
             return Err(Error::EncodingError);
         }
-        let raw = &raw[24..];
+        let raw = &der[24..];
         let container_len = TPL.len() - 4 + raw.len();
         let out_len = TPL.len() + raw.len();
         let mut out = Vec::with_capacity(out_len);
