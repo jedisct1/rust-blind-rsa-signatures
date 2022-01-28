@@ -293,7 +293,9 @@ impl PublicKey {
             .into())
     }
 
-    pub fn to_spki(&self, options: &Options) -> Result<Vec<u8>, Error> {
+    pub fn to_spki(&self, options: Option<&Options>) -> Result<Vec<u8>, Error> {
+        let default_options = Options::default();
+        let options = options.unwrap_or(&default_options);
         const SEQ: u8 = 0x30;
         const EXT: u8 = 0x80;
         const CON: u8 = 0xa0;
