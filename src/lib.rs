@@ -66,6 +66,7 @@ pub enum Error {
     VerificationFailed,
     EncodingError,
     InvalidKey,
+    IncompatibleParameters,
 }
 
 impl std::error::Error for Error {}
@@ -78,6 +79,7 @@ impl Display for Error {
             Error::VerificationFailed => write!(f, "Verification failed"),
             Error::EncodingError => write!(f, "Encoding error"),
             Error::InvalidKey => write!(f, "Invalid key"),
+            Error::IncompatibleParameters => write!(f, "Incompatible parameters"),
         }
     }
 }
@@ -293,9 +295,7 @@ impl PublicKey {
             .into())
     }
 
-    pub fn to_spki(&self, options: Option<&Options>) -> Result<Vec<u8>, Error> {
-        let default_options = Options::default();
-        let options = options.unwrap_or(&default_options);
+    const fn spki_tpl() -> &'static [u8] {
         const SEQ: u8 = 0x30;
         const EXT: u8 = 0x80;
         const CON: u8 = 0xa0;
@@ -376,15 +376,22 @@ impl PublicKey {
             0, // Public key length - Bit string - offset 69
             0, // No partial bytes
         ];
+        TPL
+    }
+
+    pub fn to_spki(&self, options: Option<&Options>) -> Result<Vec<u8>, Error> {
+        let tpl = Self::spki_tpl();
+        let default_options = Options::default();
+        let options = options.unwrap_or(&default_options);
         let der = self.to_der()?;
-        if der.len() < 24 {
+        if der.len() <= 24 {
             return Err(Error::EncodingError);
         }
         let raw = &der[24..];
-        let container_len = TPL.len() - 4 + raw.len();
-        let out_len = TPL.len() + raw.len();
+        let container_len = tpl.len() - 4 + raw.len();
+        let out_len = tpl.len() + raw.len();
         let mut out = Vec::with_capacity(out_len);
-        out.extend_from_slice(TPL);
+        out.extend_from_slice(tpl);
         out.extend_from_slice(raw);
         out[2..4].copy_from_slice(&(container_len as u16).to_be_bytes());
         out[66] = options.salt_len() as u8;
@@ -398,6 +405,32 @@ impl PublicKey {
         out[21..][..mgf1_s.len()].copy_from_slice(&mgf1_s);
         out[49..][..mgf1_s.len()].copy_from_slice(&mgf1_s);
         Ok(out)
+    }
+
+    pub fn from_spki(spki: &[u8], _options: Option<&Options>) -> Result<Self, Error> {
+        if spki.len() > 800 {
+            return Err(Error::EncodingError);
+        }
+        let tpl = Self::spki_tpl();
+        if spki.len() <= tpl.len() {
+            return Err(Error::EncodingError);
+        }
+        if spki[6..18] != tpl[6..18] {
+            return Err(Error::EncodingError);
+        }
+        let alg_len = spki[5] as usize;
+        if spki.len() <= alg_len + 10 {
+            return Err(Error::EncodingError);
+        }
+        let raw = &spki[alg_len + 10..];
+        const DER_SEQ: &[u8] = &[
+            0x30, 0x82, 0x01, 0x22, 0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d,
+            0x01, 0x01, 0x01, 0x05, 0x00, 0x03, 0x82, 0x01, 0x0f,
+        ];
+        let mut der = Vec::with_capacity(DER_SEQ.len() + raw.len());
+        der.extend_from_slice(DER_SEQ);
+        der.extend_from_slice(raw);
+        Self::from_der(&der)
     }
 
     /// Blind a message to be signed
