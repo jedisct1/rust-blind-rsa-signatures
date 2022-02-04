@@ -423,12 +423,14 @@ impl PublicKey {
             return Err(Error::EncodingError);
         }
         let raw = &spki[alg_len + 10..];
-        const DER_SEQ: &[u8] = &[
+        let der_seq: &mut [u8] = &mut [
             0x30, 0x82, 0x01, 0x22, 0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d,
             0x01, 0x01, 0x01, 0x05, 0x00, 0x03, 0x82, 0x01, 0x0f,
         ];
-        let mut der = Vec::with_capacity(DER_SEQ.len() + raw.len());
-        der.extend_from_slice(DER_SEQ);
+        der_seq[2..][..2].copy_from_slice(&(raw.len() as u16 + 19).to_be_bytes());
+        der_seq[21..][..2].copy_from_slice(&(raw.len() as u16).to_be_bytes());
+        let mut der = Vec::with_capacity(der_seq.len() + raw.len());
+        der.extend_from_slice(der_seq);
         der.extend_from_slice(raw);
         Self::from_der(&der)
     }
