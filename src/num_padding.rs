@@ -1,12 +1,13 @@
-use rsa::BigUint;
 use std::iter;
 
+use rsa::BigUint;
+
 pub trait ToBytesPadded {
-    /// Returns the byte representation of `self` in big-endian byte order, left-padding the number
-    /// with zeroes to the specified length.
+    /// Returns the byte representation of `self` in big-endian byte order,
+    /// left-padding the number with zeroes to the specified length.
     ///
-    /// If `len` is less than or equal to the length of the byte representation of `self`, no
-    /// padding will be added.
+    /// If `len` is less than or equal to the length of the byte representation
+    /// of `self`, no padding will be added.
     fn to_bytes_be_padded(&self, len: usize) -> Vec<u8>;
 }
 

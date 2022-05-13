@@ -37,6 +37,8 @@
 #[macro_use]
 extern crate derive_new;
 
+use std::fmt::{self, Display};
+
 use derive_more::*;
 use digest::DynDigest;
 use hmac_sha256::Hash as Sha256;
@@ -51,7 +53,6 @@ use rsa::pkcs8::{FromPrivateKey as _, FromPublicKey as _, ToPrivateKey as _, ToP
 use rsa::{
     BigUint, PaddingScheme, PublicKey as _, PublicKeyParts as _, RsaPrivateKey, RsaPublicKey,
 };
-use std::fmt::{self, Display};
 
 pub mod reexports {
     pub use {digest, hmac_sha512, rand, rsa};
@@ -199,7 +200,8 @@ impl KeyPair {
 }
 
 impl Signature {
-    /// Verify that the (non-blind) signature is valid for the given public key and original message
+    /// Verify that the (non-blind) signature is valid for the given public key
+    /// and original message
     pub fn verify(
         &self,
         pk: &PublicKey,
@@ -237,8 +239,8 @@ fn emsa_pss_encode(
     db[em_len - s_len - h_len - 2] = 0x01;
     db[em_len - s_len - h_len - 1..].copy_from_slice(salt);
     mgf1_xor(db, hash, h);
-    db[0] &= 0xFF >> (8 * em_len - em_bits);
-    em[em_len - 1] = 0xBC;
+    db[0] &= 0xff >> (8 * em_len - em_bits);
+    em[em_len - 1] = 0xbc;
     Ok(em)
 }
 
@@ -470,7 +472,8 @@ impl PublicKey {
         })
     }
 
-    /// Compute a valid signature for the original message given a blindly signed message
+    /// Compute a valid signature for the original message given a blindly
+    /// signed message
     pub fn finalize(
         &self,
         blind_sig: &BlindSignature,
