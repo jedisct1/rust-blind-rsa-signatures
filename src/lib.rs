@@ -48,8 +48,8 @@ use num_padding::ToBytesPadded;
 use rand::Rng;
 use rsa::algorithms::mgf1_xor;
 use rsa::internals as rsa_internals;
-use rsa::pkcs1::{FromRsaPrivateKey as _, FromRsaPublicKey as _};
-use rsa::pkcs8::{FromPrivateKey as _, FromPublicKey as _, ToPrivateKey as _, ToPublicKey as _};
+use rsa::pkcs1::{DecodeRsaPrivateKey as _, DecodeRsaPublicKey as _};
+use rsa::pkcs8::{DecodePrivateKey as _, DecodePublicKey as _, EncodePrivateKey as _, EncodePublicKey as _};
 use rsa::{
     BigUint, PaddingScheme, PublicKey as _, PublicKeyParts as _, RsaPrivateKey, RsaPublicKey,
 };
@@ -282,7 +282,7 @@ impl PublicKey {
 
     pub fn to_pem(&self) -> Result<String, Error> {
         self.as_ref()
-            .to_public_key_pem()
+            .to_public_key_pem(Default::default())
             .map_err(|_| Error::EncodingError)
     }
 
@@ -548,7 +548,7 @@ impl SecretKey {
 
     pub fn to_pem(&self) -> Result<String, Error> {
         self.as_ref()
-            .to_pkcs8_pem()
+            .to_pkcs8_pem(Default::default())
             .map_err(|_| Error::EncodingError)
             .map(|x| x.to_string())
     }
