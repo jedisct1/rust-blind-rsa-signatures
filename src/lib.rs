@@ -49,7 +49,9 @@ use rand::Rng;
 use rsa::algorithms::mgf1_xor;
 use rsa::internals as rsa_internals;
 use rsa::pkcs1::{DecodeRsaPrivateKey as _, DecodeRsaPublicKey as _};
-use rsa::pkcs8::{DecodePrivateKey as _, DecodePublicKey as _, EncodePrivateKey as _, EncodePublicKey as _};
+use rsa::pkcs8::{
+    DecodePrivateKey as _, DecodePublicKey as _, EncodePrivateKey as _, EncodePublicKey as _,
+};
 use rsa::{
     BigUint, PaddingScheme, PublicKey as _, PublicKeyParts as _, RsaPrivateKey, RsaPublicKey,
 };
