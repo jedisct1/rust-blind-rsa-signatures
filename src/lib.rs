@@ -38,6 +38,7 @@
 extern crate derive_new;
 
 use std::fmt::{self, Display};
+use std::mem;
 
 use derive_more::*;
 use digest::DynDigest;
@@ -509,19 +510,18 @@ impl PublicKey {
         if sig.len() != modulus_bytes {
             return Err(Error::UnsupportedParameters);
         }
-        let rng = rand::thread_rng();
         let (msg_hash, ps) = match options.hash {
             Hash::Sha256 => (
                 Sha256::hash(msg).to_vec(),
-                PaddingScheme::new_pss::<hmac_sha256::Hash, _>(rng),
+                PaddingScheme::new_pss::<hmac_sha256::Hash>(),
             ),
             Hash::Sha384 => (
                 Sha384::hash(msg).to_vec(),
-                PaddingScheme::new_pss::<hmac_sha512::sha384::Hash, _>(rng),
+                PaddingScheme::new_pss::<hmac_sha512::sha384::Hash>(),
             ),
             Hash::Sha512 => (
                 Sha512::hash(msg).to_vec(),
-                PaddingScheme::new_pss::<hmac_sha512::Hash, _>(rng),
+                PaddingScheme::new_pss::<hmac_sha512::Hash>(),
             ),
         };
         self.as_ref()
@@ -536,7 +536,7 @@ impl SecretKey {
         self.as_ref()
             .to_pkcs8_der()
             .map_err(|_| Error::EncodingError)
-            .map(|x| x.as_ref().to_vec())
+            .map(|x| mem::take(x.to_bytes().as_mut()))
     }
 
     pub fn from_der(der: &[u8]) -> Result<Self, Error> {

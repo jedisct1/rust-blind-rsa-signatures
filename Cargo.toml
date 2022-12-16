@@ -13,9 +13,9 @@ license = "MIT"
 
 [dependencies]
 rand = "0.8.5"
-rsa = { version = "0.6.1", features = ["expose-internals"] }
-digest = "0.10.3"
-hmac-sha256 = { version = "1.1.4", features = ["traits010"] }
-hmac-sha512 = { version = "1.1.2", features = ["traits010", "sha384"] }
+rsa = { version = "0.7.2", features = ["expose-internals"] }
+digest = "0.10.6"
+hmac-sha256 = { version = "1.1.6", features = ["traits010"] }
+hmac-sha512 = { version = "1.1.4", features = ["traits010", "sha384"] }
 derive-new = "0.5.9"
 derive_more = "0.99.17"
