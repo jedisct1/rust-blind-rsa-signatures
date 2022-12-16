@@ -14,7 +14,7 @@
 //! // [CLIENT]: create a random message and blind it for the server whose public key is `pk`.
 //! // The client must store the message and the secret.
 //! let msg = b"test";
-//! let blinding_result = pk.blind(msg, &options)?;
+//! let blinding_result = pk.blind(msg, true, &options)?;
 //!
 //! // [SERVER]: compute a signature for a blind message, to be sent to the client.
 //! // The client secret should not be sent to the server.
@@ -27,10 +27,16 @@
 //! // server cannot link it to a previous(blinded message, blind signature) pair.
 //! // Note that the finalization function also verifies that the new signature
 //! // is correct for the server public key.
-//! let sig = pk.finalize(&blind_sig, &blinding_result.secret, &msg, &options)?;
+//! let sig = pk.finalize(
+//!     &blind_sig,
+//!     &blinding_result.secret,
+//!     blinding_result.msg_randomizer,
+//!     &msg,
+//!     &options,
+//! )?;
 //!
 //! // [SERVER]: a non-blind signature can be verified using the server's public key.
-//! sig.verify(&pk, msg, &options)?;
+//! sig.verify(&pk, blinding_result.msg_randomizer, msg, &options)?;
 //! # Ok::<(), blind_rsa_signatures::Error>(())
 //! ```
 
@@ -158,11 +164,16 @@ pub struct BlindSignature(pub Vec<u8>);
 #[derive(Clone, Debug, AsRef, Deref, From, Into, new)]
 pub struct Signature(pub Vec<u8>);
 
+/// A message randomizer (noise added as a prefix to the message)
+#[derive(Clone, Copy, Debug)]
+pub struct MessageRandomizer(pub [u8; 32]);
+
 /// Result of a blinding operation
 #[derive(Clone, Debug)]
 pub struct BlindingResult {
     pub blind_msg: BlindedMessage,
     pub secret: Secret,
+    pub msg_randomizer: Option<MessageRandomizer>,
 }
 
 impl AsRef<[u8]> for Secret {
@@ -208,10 +219,11 @@ impl Signature {
     pub fn verify(
         &self,
         pk: &PublicKey,
+        msg_randomizer: Option<MessageRandomizer>,
         msg: impl AsRef<[u8]>,
         options: &Options,
     ) -> Result<(), Error> {
-        pk.verify(self, msg, options)
+        pk.verify(self, msg_randomizer, msg, options)
     }
 }
 
@@ -440,16 +452,49 @@ impl PublicKey {
         Self::from_der(&der)
     }
 
-    /// Blind a message to be signed
-    pub fn blind(&self, msg: impl AsRef<[u8]>, options: &Options) -> Result<BlindingResult, Error> {
+    /// Blind a message (after optional randomization) to be signed
+    pub fn blind(
+        &self,
+        msg: impl AsRef<[u8]>,
+        randomize_message: bool,
+        options: &Options,
+    ) -> Result<BlindingResult, Error> {
         let msg = msg.as_ref();
         let mut rng = rand::thread_rng();
         let modulus_bytes = self.0.size();
         let modulus_bits = modulus_bytes * 8;
+        let msg_randomizer = if randomize_message {
+            let mut noise = [0u8; 32];
+            rng.fill(&mut noise[..]);
+            Some(MessageRandomizer(noise))
+        } else {
+            None
+        };
         let msg_hash = match options.hash {
-            Hash::Sha256 => Sha256::hash(msg).to_vec(),
-            Hash::Sha384 => Sha384::hash(msg).to_vec(),
-            Hash::Sha512 => Sha512::hash(msg).to_vec(),
+            Hash::Sha256 => {
+                let mut h = Sha256::new();
+                if let Some(p) = msg_randomizer.as_ref() {
+                    h.update(&p.0);
+                }
+                h.update(msg);
+                h.finalize().to_vec()
+            }
+            Hash::Sha384 => {
+                let mut h = Sha384::new();
+                if let Some(p) = msg_randomizer.as_ref() {
+                    h.update(&p.0);
+                }
+                h.update(msg);
+                h.finalize().to_vec()
+            }
+            Hash::Sha512 => {
+                let mut h = Sha512::new();
+                if let Some(p) = msg_randomizer.as_ref() {
+                    h.update(&p.0);
+                }
+                h.update(msg);
+                h.finalize().to_vec()
+            }
         };
         let salt_len = options.salt_len();
         let mut salt = vec![0u8; salt_len];
@@ -472,6 +517,7 @@ impl PublicKey {
         Ok(BlindingResult {
             blind_msg: BlindedMessage(blind_msg.to_bytes_be_padded(modulus_bytes)),
             secret: Secret(secret.to_bytes_be_padded(modulus_bytes)),
+            msg_randomizer,
         })
     }
 
@@ -481,6 +527,7 @@ impl PublicKey {
         &self,
         blind_sig: &BlindSignature,
         secret: &Secret,
+        msg_randomizer: Option<MessageRandomizer>,
         msg: impl AsRef<[u8]>,
         options: &Options,
     ) -> Result<Signature, Error> {
@@ -494,7 +541,7 @@ impl PublicKey {
             rsa_internals::unblind(self.as_ref(), &blind_sig, &secret)
                 .to_bytes_be_padded(modulus_bytes),
         );
-        self.verify(&sig, msg, options)?;
+        self.verify(&sig, msg_randomizer, msg, options)?;
         Ok(sig)
     }
 
@@ -502,6 +549,7 @@ impl PublicKey {
     pub fn verify(
         &self,
         sig: &Signature,
+        msg_randomizer: Option<MessageRandomizer>,
         msg: impl AsRef<[u8]>,
         options: &Options,
     ) -> Result<(), Error> {
@@ -512,15 +560,36 @@ impl PublicKey {
         }
         let (msg_hash, ps) = match options.hash {
             Hash::Sha256 => (
-                Sha256::hash(msg).to_vec(),
+                {
+                    let mut h = Sha256::new();
+                    if let Some(p) = msg_randomizer.as_ref() {
+                        h.update(&p.0);
+                    }
+                    h.update(msg);
+                    h.finalize().to_vec()
+                },
                 PaddingScheme::new_pss::<hmac_sha256::Hash>(),
             ),
             Hash::Sha384 => (
-                Sha384::hash(msg).to_vec(),
+                {
+                    let mut h = Sha384::new();
+                    if let Some(p) = msg_randomizer.as_ref() {
+                        h.update(&p.0);
+                    }
+                    h.update(msg);
+                    h.finalize().to_vec()
+                },
                 PaddingScheme::new_pss::<hmac_sha512::sha384::Hash>(),
             ),
             Hash::Sha512 => (
-                Sha512::hash(msg).to_vec(),
+                {
+                    let mut h = Sha512::new();
+                    if let Some(p) = msg_randomizer.as_ref() {
+                        h.update(&p.0);
+                    }
+                    h.update(msg);
+                    h.finalize().to_vec()
+                },
                 PaddingScheme::new_pss::<hmac_sha512::Hash>(),
             ),
         };
