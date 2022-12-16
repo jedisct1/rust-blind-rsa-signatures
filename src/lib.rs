@@ -165,7 +165,7 @@ pub struct BlindSignature(pub Vec<u8>);
 pub struct Signature(pub Vec<u8>);
 
 /// A message randomizer (noise added as a prefix to the message)
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, AsRef, Deref, From, Into, new)]
 pub struct MessageRandomizer(pub [u8; 32]);
 
 /// Result of a blinding operation
