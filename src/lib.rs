@@ -474,7 +474,7 @@ impl PublicKey {
             Hash::Sha256 => {
                 let mut h = Sha256::new();
                 if let Some(p) = msg_randomizer.as_ref() {
-                    h.update(&p.0);
+                    h.update(p.0);
                 }
                 h.update(msg);
                 h.finalize().to_vec()
@@ -482,7 +482,7 @@ impl PublicKey {
             Hash::Sha384 => {
                 let mut h = Sha384::new();
                 if let Some(p) = msg_randomizer.as_ref() {
-                    h.update(&p.0);
+                    h.update(p.0);
                 }
                 h.update(msg);
                 h.finalize().to_vec()
@@ -490,7 +490,7 @@ impl PublicKey {
             Hash::Sha512 => {
                 let mut h = Sha512::new();
                 if let Some(p) = msg_randomizer.as_ref() {
-                    h.update(&p.0);
+                    h.update(p.0);
                 }
                 h.update(msg);
                 h.finalize().to_vec()
@@ -563,7 +563,7 @@ impl PublicKey {
                 {
                     let mut h = Sha256::new();
                     if let Some(p) = msg_randomizer.as_ref() {
-                        h.update(&p.0);
+                        h.update(p.0);
                     }
                     h.update(msg);
                     h.finalize().to_vec()
@@ -574,7 +574,7 @@ impl PublicKey {
                 {
                     let mut h = Sha384::new();
                     if let Some(p) = msg_randomizer.as_ref() {
-                        h.update(&p.0);
+                        h.update(p.0);
                     }
                     h.update(msg);
                     h.finalize().to_vec()
@@ -585,7 +585,7 @@ impl PublicKey {
                 {
                     let mut h = Sha512::new();
                     if let Some(p) = msg_randomizer.as_ref() {
-                        h.update(&p.0);
+                        h.update(p.0);
                     }
                     h.update(msg);
                     h.finalize().to_vec()
