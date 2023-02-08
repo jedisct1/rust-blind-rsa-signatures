@@ -9,7 +9,7 @@
 //! let rng = &mut rand::thread_rng();
 //!
 //! // [SERVER]: Generate a RSA-2048 key pair
-//! let kp = KeyPair::generate(2048)?;
+//! let kp = KeyPair::generate(rng, 2048)?;
 //! let (pk, sk) = (kp.pk, kp.sk);
 //!
 //! // [CLIENT]: create a random message and blind it for the server whose public key is `pk`.
