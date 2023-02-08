@@ -6,6 +6,7 @@
 //! use blind_rsa_signatures::{KeyPair, Options};
 //!
 //! let options = Options::default();
+//! let rng = &mut rand::thread_rng();
 //!
 //! // [SERVER]: Generate a RSA-2048 key pair
 //! let kp = KeyPair::generate(2048)?;
@@ -14,11 +15,11 @@
 //! // [CLIENT]: create a random message and blind it for the server whose public key is `pk`.
 //! // The client must store the message and the secret.
 //! let msg = b"test";
-//! let blinding_result = pk.blind(msg, true, &options)?;
+//! let blinding_result = pk.blind(rng, msg, true, &options)?;
 //!
 //! // [SERVER]: compute a signature for a blind message, to be sent to the client.
 //! // The client secret should not be sent to the server.
-//! let blind_sig = sk.blind_sign(&blinding_result.blind_msg, &options)?;
+//! let blind_sig = sk.blind_sign(rng, &blinding_result.blind_msg, &options)?;
 //!
 //! // [CLIENT]: later, when the client wants to redeem a signed blind message,
 //! // using the blinding secret, it can locally compute the signature of the
@@ -52,7 +53,7 @@ use hmac_sha256::Hash as Sha256;
 use hmac_sha512::sha384::Hash as Sha384;
 use hmac_sha512::Hash as Sha512;
 use num_padding::ToBytesPadded;
-use rand::Rng;
+use rand::{CryptoRng, Rng, RngCore};
 use rsa::algorithms::mgf1_xor;
 use rsa::internals as rsa_internals;
 use rsa::pkcs1::{DecodeRsaPrivateKey as _, DecodeRsaPublicKey as _};
@@ -453,14 +454,14 @@ impl PublicKey {
     }
 
     /// Blind a message (after optional randomization) to be signed
-    pub fn blind(
+    pub fn blind<R: CryptoRng + RngCore>(
         &self,
+        rng: &mut R,
         msg: impl AsRef<[u8]>,
         randomize_message: bool,
         options: &Options,
     ) -> Result<BlindingResult, Error> {
         let msg = msg.as_ref();
-        let mut rng = rand::thread_rng();
         let modulus_bytes = self.0.size();
         let modulus_bits = modulus_bytes * 8;
         let msg_randomizer = if randomize_message {
@@ -513,7 +514,7 @@ impl PublicKey {
         };
         let m = BigUint::from_bytes_be(&padded);
 
-        let (blind_msg, secret) = rsa_internals::blind(&mut rng, self.as_ref(), &m);
+        let (blind_msg, secret) = rsa_internals::blind(rng, self.as_ref(), &m);
         Ok(BlindingResult {
             blind_msg: BlindedMessage(blind_msg.to_bytes_be_padded(modulus_bytes)),
             secret: Secret(secret.to_bytes_be_padded(modulus_bytes)),
@@ -638,8 +639,9 @@ impl SecretKey {
     }
 
     /// Sign a blinded message
-    pub fn blind_sign(
+    pub fn blind_sign<R: CryptoRng + RngCore>(
         &self,
+        rng: &mut R,
         blind_msg: impl AsRef<[u8]>,
         _options: &Options,
     ) -> Result<BlindSignature, Error> {
@@ -647,12 +649,11 @@ impl SecretKey {
         if blind_msg.as_ref().len() != modulus_bytes {
             return Err(Error::UnsupportedParameters);
         }
-        let mut rng = rand::thread_rng();
         let blind_msg = BigUint::from_bytes_be(blind_msg.as_ref());
         if &blind_msg >= self.0.n() {
             return Err(Error::UnsupportedParameters);
         }
-        let blind_sig = rsa_internals::decrypt_and_check(Some(&mut rng), self.as_ref(), &blind_msg)
+        let blind_sig = rsa_internals::decrypt_and_check(Some(rng), self.as_ref(), &blind_msg)
             .map_err(|_| Error::InternalError)?;
         Ok(BlindSignature(blind_sig.to_bytes_be_padded(modulus_bytes)))
     }
