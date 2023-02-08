@@ -203,10 +203,12 @@ impl AsRef<[u8]> for Signature {
 
 impl KeyPair {
     /// Generate a new key pair
-    pub fn generate(modulus_bits: usize) -> Result<KeyPair, Error> {
-        let mut rng = rand::thread_rng();
+    pub fn generate<R: CryptoRng + RngCore>(
+        rng: &mut R,
+        modulus_bits: usize,
+    ) -> Result<KeyPair, Error> {
         let mut sk =
-            RsaPrivateKey::new(&mut rng, modulus_bits).map_err(|_| Error::UnsupportedParameters)?;
+            RsaPrivateKey::new(rng, modulus_bits).map_err(|_| Error::UnsupportedParameters)?;
         sk.precompute().map_err(|_| Error::InternalError)?;
         let sk = SecretKey(sk);
         let pk = sk.public_key()?;
