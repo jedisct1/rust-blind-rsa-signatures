@@ -44,6 +44,7 @@
 #[macro_use]
 extern crate derive_new;
 
+use std::convert::TryFrom;
 use std::fmt::{self, Display};
 use std::mem;
 
@@ -60,9 +61,8 @@ use rsa::pkcs1::{DecodeRsaPrivateKey as _, DecodeRsaPublicKey as _};
 use rsa::pkcs8::{
     DecodePrivateKey as _, DecodePublicKey as _, EncodePrivateKey as _, EncodePublicKey as _,
 };
-use rsa::{
-    BigUint, PaddingScheme, PublicKey as _, PublicKeyParts as _, RsaPrivateKey, RsaPublicKey,
-};
+use rsa::signature::hazmat::PrehashVerifier;
+use rsa::{BigUint, PublicKeyParts as _, RsaPrivateKey, RsaPublicKey};
 
 pub mod reexports {
     pub use {digest, hmac_sha512, rand, rsa};
@@ -561,44 +561,41 @@ impl PublicKey {
         if sig.len() != modulus_bytes {
             return Err(Error::UnsupportedParameters);
         }
-        let (msg_hash, ps) = match options.hash {
-            Hash::Sha256 => (
-                {
-                    let mut h = Sha256::new();
-                    if let Some(p) = msg_randomizer.as_ref() {
-                        h.update(p.0);
-                    }
-                    h.update(msg);
-                    h.finalize().to_vec()
-                },
-                PaddingScheme::new_pss::<hmac_sha256::Hash>(),
-            ),
-            Hash::Sha384 => (
-                {
-                    let mut h = Sha384::new();
-                    if let Some(p) = msg_randomizer.as_ref() {
-                        h.update(p.0);
-                    }
-                    h.update(msg);
-                    h.finalize().to_vec()
-                },
-                PaddingScheme::new_pss::<hmac_sha512::sha384::Hash>(),
-            ),
-            Hash::Sha512 => (
-                {
-                    let mut h = Sha512::new();
-                    if let Some(p) = msg_randomizer.as_ref() {
-                        h.update(p.0);
-                    }
-                    h.update(msg);
-                    h.finalize().to_vec()
-                },
-                PaddingScheme::new_pss::<hmac_sha512::Hash>(),
-            ),
-        };
-        self.as_ref()
-            .verify(ps, &msg_hash, sig) // salt length is ignored
+        let sig_ = rsa::pss::Signature::try_from(sig.as_ref())
             .map_err(|_| Error::VerificationFailed)?;
+        let verified = match options.hash {
+            Hash::Sha256 => {
+                let mut h = Sha256::new();
+                if let Some(p) = msg_randomizer.as_ref() {
+                    h.update(p.0);
+                }
+                h.update(msg);
+                let h = h.finalize().to_vec();
+                rsa::pss::VerifyingKey::<Sha256>::new(self.0.clone())
+                    .verify_prehash(&h, &sig_)
+            }
+            Hash::Sha384 => {
+                let mut h = Sha384::new();
+                if let Some(p) = msg_randomizer.as_ref() {
+                    h.update(p.0);
+                }
+                h.update(msg);
+                let h = h.finalize().to_vec();
+                rsa::pss::VerifyingKey::<Sha384>::new(self.0.clone())
+                    .verify_prehash(&h, &sig_)
+            }
+            Hash::Sha512 => {
+                let mut h = Sha512::new();
+                if let Some(p) = msg_randomizer.as_ref() {
+                    h.update(p.0);
+                }
+                h.update(msg);
+                let h = h.finalize().to_vec();
+                rsa::pss::VerifyingKey::<Sha512>::new(self.0.clone())
+                    .verify_prehash(&h, &sig_)
+            }
+        };
+        verified.map_err(|_| Error::VerificationFailed)?;
         Ok(())
     }
 }
