@@ -31,19 +31,20 @@ The scheme was designed by David Chaum, and was originally implemented for anony
 ```rust
 use blind_rsa_signatures::{KeyPair, Options};
 let options = Options::default();
+let rng = &mut rand::thread_rng();
 
 // [SERVER]: Generate a RSA-2048 key pair
-let kp = KeyPair::generate(2048)?;
+let kp = KeyPair::generate(rng, 2048)?;
 let (pk, sk) = (kp.pk, kp.sk);
 
 // [CLIENT]: create a random message and blind it for the server whose public key is `pk`.
 // The client must store the message and the secret.
 let msg = b"test";
-let blinding_result = pk.blind(msg, true, &options)?;
+let blinding_result = pk.blind(rng, msg, true, &options)?;
 
 // [SERVER]: compute a signature for a blind message, to be sent to the client.
 // The client secret should not be sent to the server.
-let blind_sig = sk.blind_sign(&blinding_result.blind_msg, &options)?;
+let blind_sig = sk.blind_sign(rng, &blinding_result.blind_msg, &options)?;
 
 // [CLIENT]: later, when the client wants to redeem a signed blind message,
 // using the blinding secret, it can locally compute the signature of the
