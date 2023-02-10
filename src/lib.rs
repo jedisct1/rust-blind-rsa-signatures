@@ -53,7 +53,9 @@ use digest::DynDigest;
 use hmac_sha256::Hash as Sha256;
 use hmac_sha512::sha384::Hash as Sha384;
 use hmac_sha512::Hash as Sha512;
+use num_integer::Integer;
 use num_padding::ToBytesPadded;
+use num_traits::One;
 use rand::{CryptoRng, Rng, RngCore};
 use rsa::algorithms::mgf1_xor;
 use rsa::internals as rsa_internals;
@@ -515,6 +517,9 @@ impl PublicKey {
             }
         };
         let m = BigUint::from_bytes_be(&padded);
+        if m.gcd(self.0.n()) != BigUint::one() {
+            return Err(Error::UnsupportedParameters);
+        }
 
         let (blind_msg, secret) = rsa_internals::blind(rng, self.as_ref(), &m);
         Ok(BlindingResult {
@@ -561,8 +566,8 @@ impl PublicKey {
         if sig.len() != modulus_bytes {
             return Err(Error::UnsupportedParameters);
         }
-        let sig_ = rsa::pss::Signature::try_from(sig.as_ref())
-            .map_err(|_| Error::VerificationFailed)?;
+        let sig_ =
+            rsa::pss::Signature::try_from(sig.as_ref()).map_err(|_| Error::VerificationFailed)?;
         let verified = match options.hash {
             Hash::Sha256 => {
                 let mut h = Sha256::new();
@@ -571,8 +576,7 @@ impl PublicKey {
                 }
                 h.update(msg);
                 let h = h.finalize().to_vec();
-                rsa::pss::VerifyingKey::<Sha256>::new(self.0.clone())
-                    .verify_prehash(&h, &sig_)
+                rsa::pss::VerifyingKey::<Sha256>::new(self.0.clone()).verify_prehash(&h, &sig_)
             }
             Hash::Sha384 => {
                 let mut h = Sha384::new();
@@ -581,8 +585,7 @@ impl PublicKey {
                 }
                 h.update(msg);
                 let h = h.finalize().to_vec();
-                rsa::pss::VerifyingKey::<Sha384>::new(self.0.clone())
-                    .verify_prehash(&h, &sig_)
+                rsa::pss::VerifyingKey::<Sha384>::new(self.0.clone()).verify_prehash(&h, &sig_)
             }
             Hash::Sha512 => {
                 let mut h = Sha512::new();
@@ -591,8 +594,7 @@ impl PublicKey {
                 }
                 h.update(msg);
                 let h = h.finalize().to_vec();
-                rsa::pss::VerifyingKey::<Sha512>::new(self.0.clone())
-                    .verify_prehash(&h, &sig_)
+                rsa::pss::VerifyingKey::<Sha512>::new(self.0.clone()).verify_prehash(&h, &sig_)
             }
         };
         verified.map_err(|_| Error::VerificationFailed)?;
