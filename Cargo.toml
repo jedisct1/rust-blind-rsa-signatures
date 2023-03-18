@@ -21,3 +21,10 @@ hmac-sha256 = { version = "1.1.6", features = ["traits010"] }
 hmac-sha512 = { version = "1.1.4", features = ["traits010", "sha384"] }
 derive-new = "0.5.9"
 derive_more = "0.99.17"
+
+[dev-dependencies]
+criterion = "0.4"
+
+[[bench]]
+name = "speed_test"
+harness = false
