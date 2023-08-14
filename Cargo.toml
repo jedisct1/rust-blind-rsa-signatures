@@ -13,17 +13,17 @@ license = "MIT"
 
 [dependencies]
 num-integer = "0.1.45"
-num-traits = "0.2.15"
+num-traits = "0.2.16"
 rand = "0.8.5"
-rsa = { version = "0.8.1", features = ["expose-internals"] }
-digest = "0.10.6"
-hmac-sha256 = { version = "1.1.6", features = ["traits010"] }
-hmac-sha512 = { version = "1.1.4", features = ["traits010", "sha384"] }
+rsa = { version = "0.8.2", features = ["expose-internals"] }
+digest = "0.10.7"
+hmac-sha256 = { version = "1.1.7", features = ["traits010"] }
+hmac-sha512 = { version = "1.1.5", features = ["traits010", "sha384"] }
 derive-new = "0.5.9"
 derive_more = "0.99.17"
 
 [dev-dependencies]
-criterion = "0.4"
+criterion = "0.5"
 
 [[bench]]
 name = "speed_test"
