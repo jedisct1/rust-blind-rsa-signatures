@@ -6,7 +6,7 @@
 
 Author-blinded RSASSA-PSS RSAE signatures.
 
-This is an implementation of the [RSA Blind Signatures](https://tools.ietf.org/html/draft-irtf-cfrg-rsa-blind-signatures) IETF draft, based on [the Zig implementation](https://github.com/jedisct1/zig-rsa-blind-signatures).
+This is an implementation of the [RSA Blind Signatures](https://www.rfc-editor.org/rfc/rfc9474.html) RFC, based on [the Zig implementation](https://github.com/jedisct1/zig-rsa-blind-signatures).
 
 ## Protocol overview
 
