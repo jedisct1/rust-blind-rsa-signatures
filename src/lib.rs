@@ -140,10 +140,12 @@ impl Options {
 }
 
 /// An RSA public key
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug, Eq, PartialEq, AsRef, Deref, From, Into, new)]
 pub struct PublicKey(pub RsaPublicKey);
 
 /// An RSA secret key
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug, AsRef, Deref, From, Into, new)]
 pub struct SecretKey(pub RsaPrivateKey);
 

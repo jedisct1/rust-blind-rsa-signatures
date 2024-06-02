@@ -27,7 +27,8 @@ serde = {version = "1.0.203", features = ["derive"], optional = true }
 criterion = "0.5"
 
 [features]
-serde = ["dep:serde"]
+default = ["serde"]
+serde = ["dep:serde", "rsa/serde"]
 
 [[bench]]
 name = "speed_test"
