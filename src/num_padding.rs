@@ -15,10 +15,7 @@ impl ToBytesPadded for BigUint {
     fn to_bytes_be_padded(&self, len: usize) -> Vec<u8> {
         let v = self.to_bytes_be();
         if len > v.len() {
-            iter::repeat(0)
-                .take(len - v.len())
-                .chain(v.into_iter())
-                .collect()
+            iter::repeat(0).take(len - v.len()).chain(v).collect()
         } else {
             v
         }

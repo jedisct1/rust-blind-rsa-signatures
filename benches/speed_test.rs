@@ -39,7 +39,7 @@ pub fn protocol(c: &mut Criterion) {
                         &blind_sig,
                         &blinding_result.secret,
                         blinding_result.msg_randomizer,
-                        &msg,
+                        msg,
                         &options,
                     )
                     .unwrap();
@@ -51,7 +51,7 @@ pub fn protocol(c: &mut Criterion) {
                 &blind_sig,
                 &blinding_result.secret,
                 blinding_result.msg_randomizer,
-                &msg,
+                msg,
                 &options,
             )
             .unwrap();
