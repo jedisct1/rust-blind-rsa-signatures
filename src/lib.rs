@@ -66,6 +66,9 @@ use rsa::pkcs8::{
 use rsa::signature::hazmat::PrehashVerifier;
 use rsa::{BigUint, PublicKeyParts as _, RsaPrivateKey, RsaPublicKey};
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 pub mod reexports {
     pub use {digest, hmac_sha512, rand, rsa};
 }
@@ -137,10 +140,12 @@ impl Options {
 }
 
 /// An RSA public key
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug, Eq, PartialEq, AsRef, Deref, From, Into, new)]
 pub struct PublicKey(pub RsaPublicKey);
 
 /// An RSA secret key
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug, AsRef, Deref, From, Into, new)]
 pub struct SecretKey(pub RsaPrivateKey);
 
@@ -156,18 +161,22 @@ pub struct KeyPair {
 pub struct Secret(pub Vec<u8>);
 
 /// A blinded message
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug, AsRef, Deref, From, Into, new)]
 pub struct BlindedMessage(pub Vec<u8>);
 
 /// A blind signature
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug, AsRef, Deref, From, Into, new)]
 pub struct BlindSignature(pub Vec<u8>);
 
 /// A (non-blind) signature
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug, AsRef, Deref, From, Into, new)]
 pub struct Signature(pub Vec<u8>);
 
 /// A message randomizer (noise added as a prefix to the message)
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Copy, Debug, AsRef, Deref, From, Into, new)]
 pub struct MessageRandomizer(pub [u8; 32]);
 
