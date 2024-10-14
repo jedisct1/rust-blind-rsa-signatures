@@ -19,9 +19,13 @@ rsa = { version = "0.8.2", features = ["expose-internals"] }
 digest = "0.10.7"
 hmac-sha256 = { version = "1.1.7", features = ["traits010"] }
 hmac-sha512 = { version = "1.1.5", features = ["traits010", "sha384"] }
+hkdf = "0.12.3"
+hmac = "0.12"
 derive-new = "0.5.9"
 derive_more = "0.99.17"
 serde = {version = "1", features = ["derive"], optional = true }
+num-primes = "0.3"
+num-bigint-dig = "0.8"
 
 [dev-dependencies]
 criterion = "0.5"
