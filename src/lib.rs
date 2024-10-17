@@ -10,20 +10,16 @@
 //!
 //! // [SERVER]: Generate a RSA-2048 key pair
 //! let kp = KeyPair::generate(rng, 2048)?;
-//! let kd = KeyPair::generate_safe_prime_pair(2048)?;
 //! 
 //! let (pk, sk) = (kp.pk, kp.sk);
-//! let (pd, ps) = (kd.pk, kd.sk);
 //!
 //! // [CLIENT]: create a random message and blind it for the server whose public key is `pk`.
 //! // The client must store the message and the secret.
 //! let msg = b"test";
 //! let blinding_result = pk.blind(rng, msg, true, &options)?;
-//!
 //! // [SERVER]: compute a signature for a blind message, to be sent to the client.
 //! // The client secret should not be sent to the server.
 //! let blind_sig = sk.blind_sign(rng, &blinding_result.blind_msg, &options)?;
-//!
 //! // [CLIENT]: later, when the client wants to redeem a signed blind message,
 //! // using the blinding secret, it can locally compute the signature of the
 //! // original message.
@@ -38,7 +34,6 @@
 //!     &msg,
 //!     &options,
 //! )?;
-//!
 //! // [SERVER]: a non-blind signature can be verified using the server's public key.
 //! sig.verify(&pk, blinding_result.msg_randomizer, msg, &options)?;
 //! # Ok::<(), blind_rsa_signatures::Error>(())
@@ -58,10 +53,9 @@ use hkdf::Hkdf;
 use hmac_sha256::Hash as Sha256;
 use hmac_sha512::sha384::Hash as Sha384;
 use hmac_sha512::Hash as Sha512;
-use num_bigint_dig::traits::ModInverse;
+use num_bigint_dig::traits::ModInverse; 
 use num_integer::Integer;
 use num_padding::ToBytesPadded;
-use num_primes::{Generator, Verification};
 use num_traits::One;
 use rand::{CryptoRng, Rng, RngCore};
 use rsa::algorithms::mgf1_xor;
@@ -235,47 +229,6 @@ impl KeyPair {
         let sk = SecretKey(sk);
         let pk = sk.public_key()?;
         Ok(KeyPair { sk, pk })
-    }
-
-    // Generate a prime safe key pair used for Partial Blinding RSA
-    pub fn generate_safe_prime_pair(modulus_bits: usize,) -> Result<KeyPair, Error> {
-        if modulus_bits % 2 != 0 {
-            return Err(Error::UnsupportedParameters); 
-        }
-
-        let p = Self::safe_prime(modulus_bits / 2);
-        let mut q = Self::safe_prime(modulus_bits / 2); 
-
-        while p == q {
-            q = Self::safe_prime(modulus_bits / 2); 
-        }
-
-        let phi = (&p - BigUint::one()) * (&q - BigUint::one());
-        let e = BigUint::from(65537u32);
-        let d = e.clone().mod_inverse(phi.clone()).unwrap().to_biguint().unwrap(); 
-        let n = &p * &q;
-
-        let sk = RsaPrivateKey::from_components(n.clone(), phi, d, vec![p, q]).map_err(|_| Error::InvalidKey)?; 
-        let pk = RsaPublicKey::new(n, e).map_err(|_| Error::UnsupportedParameters)?;
-
-        Ok(KeyPair {
-            pk: PublicKey(pk),
-            sk: SecretKey(sk),
-        })
-    }
-    
-    fn safe_prime(bits: usize) -> BigUint {
-        loop {
-            let p_prime_num = Generator::new_prime(bits - 1);
-            let p_prime = BigUint::from_bytes_be(&p_prime_num.to_bytes_be());
-            let two = BigUint::from(2u32);
-            let one = BigUint::from(1u32);
-            let p = (two * p_prime) + one;
-
-            if Verification::is_prime(&p_prime_num) {
-                return p;
-            }
-        }
     }
 }
 
@@ -590,24 +543,30 @@ impl PublicKey {
         })
     }
 
-     // Partially Blind a message to be signed
-     pub fn partial_blind<R: CryptoRng + RngCore>(
+     // Partially Blind a message to be signed with public metadata
+     pub fn blind_with_metadata<R: CryptoRng + RngCore>(
         &self,
         rng: &mut R,
         msg: impl AsRef<[u8]>,
-        info: &[u8],
+        metadata: &[u8],
         randomize_message: bool,
         options: &Options,
     ) -> Result<BlindingResult, Error> {
         let msg = msg.as_ref();
-        let modulus_bytes = self.0.size();
+        let modulus_bytes = self.n().to_bytes_be().len();
         let modulus_bits = modulus_bytes * 8;
-        let info_len_bytes = (info.len() as u32).to_be_bytes();
-        let mut msg_prime = Vec::with_capacity(4 + 4 + info.len() + msg.as_ref().len());
+        let metadata_len = metadata.len() as u32; 
+        let metadata_len_bytes = metadata_len.to_le_bytes(); 
+        // Initialize msg_prime with the total capacity
+        let mut msg_prime = Vec::with_capacity(4 + 4 + metadata.len() + msg.as_ref().len());
+
+        // Concatenate the components for msg_prime
         msg_prime.extend_from_slice(b"msg");
-        msg_prime.extend_from_slice(&info_len_bytes);
-        msg_prime.extend_from_slice(info);
+        msg_prime.extend_from_slice(&metadata_len_bytes);
+        msg_prime.extend_from_slice(metadata); 
         msg_prime.extend_from_slice(msg.as_ref());
+            
+    
         let msg_randomizer = if randomize_message {
             let mut noise = [0u8; 32];
             rng.fill(&mut noise[..]);
@@ -621,7 +580,7 @@ impl PublicKey {
                 if let Some(p) = msg_randomizer.as_ref() {
                     h.update(p.0);
                 }
-                h.update(msg_prime);
+                h.update(msg_prime.clone());
                 h.finalize().to_vec()
             }
             Hash::Sha384 => {
@@ -629,7 +588,7 @@ impl PublicKey {
                 if let Some(p) = msg_randomizer.as_ref() {
                     h.update(p.0);
                 }
-                h.update(msg_prime);
+                h.update(msg_prime.clone());
                 h.finalize().to_vec()
             }
             Hash::Sha512 => {
@@ -637,14 +596,14 @@ impl PublicKey {
                 if let Some(p) = msg_randomizer.as_ref() {
                     h.update(p.0);
                 }
-                h.update(msg_prime);
+                h.update(msg_prime.clone());
                 h.finalize().to_vec()
             }
         };
         let salt_len = options.salt_len();
         let mut salt = vec![0u8; salt_len];
         rng.fill(&mut salt[..]);
-
+    
         let padded = match options.hash {
             Hash::Sha256 => {
                 emsa_pss_encode(&msg_hash, modulus_bits - 1, &salt, &mut Sha256::new())?
@@ -660,9 +619,9 @@ impl PublicKey {
         if m.gcd(self.0.n()) != BigUint::one() {
             return Err(Error::UnsupportedParameters);
         }
-        
-        let pk_derived = PublicKey::derive_public_key(self.0.n(),info, options.hash.clone())?;
-        let (blind_msg, secret) = rsa_internals::blind(rng, pk_derived.as_ref(), &m);
+    
+        let pk_derived = PublicKey::derive_public_key(self.n(), metadata, options.hash.clone())?;
+        let (blind_msg, secret) = rsa_internals::blind(rng, pk_derived.as_ref(), &m); 
         Ok(BlindingResult {
             blind_msg: BlindedMessage(blind_msg.to_bytes_be_padded(modulus_bytes)),
             secret: Secret(secret.to_bytes_be_padded(modulus_bytes)),
@@ -694,37 +653,44 @@ impl PublicKey {
         Ok(sig)
     }
 
-    pub fn partial_blind_finalize(
+    pub fn finalize_with_metadata(
         &self,
         blind_sig: &BlindSignature,
         secret: &Secret,
         msg_randomizer: Option<MessageRandomizer>,
         msg: impl AsRef<[u8]>,
-        info: &[u8],
+        metadata: &[u8],
         options: &Options,
     ) -> Result<Signature, Error> {
-
-        let modulus_bytes = self.0.size();
+        let modulus_bytes = self.n().to_bytes_be().len();
         if blind_sig.len() != modulus_bytes || secret.len() != modulus_bytes {
             return Err(Error::UnsupportedParameters);
         }
-        let info_len_bytes = (info.len() as u32).to_be_bytes();
-        let mut msg_prime = Vec::with_capacity(4 + 4 + info.len() + msg.as_ref().len());
+        let metadata_len = metadata.len() as u32; 
+        let metadata_len_bytes = metadata_len.to_le_bytes(); 
+        // Initialize msg_prime with the total capacity
+        let mut msg_prime = Vec::with_capacity(4 + 4 + metadata.len() + msg.as_ref().len());
+
+        // Concatenate the components for msg_prime
         msg_prime.extend_from_slice(b"msg");
-        msg_prime.extend_from_slice(&info_len_bytes);
-        msg_prime.extend_from_slice(info);
+        msg_prime.extend_from_slice(&metadata_len_bytes);
+        msg_prime.extend_from_slice(metadata);
         msg_prime.extend_from_slice(msg.as_ref());
+    
+    
         let blind_sig = BigUint::from_bytes_be(blind_sig);
         let secret = BigUint::from_bytes_be(secret);
-        let pk_derived = PublicKey::derive_public_key(self.0.n(),info, options.hash.clone())?;
+        let pk_derived = PublicKey::derive_public_key(self.n(), metadata, options.hash.clone())?;
+    
         let sig = Signature(
             rsa_internals::unblind(pk_derived.as_ref(), &blind_sig, &secret)
                 .to_bytes_be_padded(modulus_bytes),
         );
-        PublicKey::partial_blind_verify(pk_derived,&sig, msg_randomizer, msg_prime, info, options)?;
+    
+        PublicKey::verify_with_metadata(pk_derived, &sig, msg_randomizer, msg_prime, metadata, options)?;
         Ok(sig)
     }
-
+    
     /// Verify a (non-blind) signature
     pub fn verify(
         &self,
@@ -773,12 +739,12 @@ impl PublicKey {
         Ok(())
     }
 
-    pub fn partial_blind_verify(
+    pub fn verify_with_metadata(
         pk_derived: PublicKey,
         sig: &Signature,
         msg_randomizer: Option<MessageRandomizer>,
         msg_prime: impl AsRef<[u8]>,
-        _info: &[u8],
+        _metadata: &[u8],
         options: &Options,
     ) -> Result<(), Error> {
         let msg_prime = msg_prime.as_ref();
@@ -786,8 +752,8 @@ impl PublicKey {
         if sig.len() != modulus_bytes {
             return Err(Error::UnsupportedParameters);
         }
-        let sig_ =
-            rsa::pss::Signature::try_from(sig.as_ref()).map_err(|_| Error::VerificationFailed)?;
+        let sig_ = rsa::pss::Signature::try_from(sig.as_ref()).map_err(|_| Error::VerificationFailed)?;
+    
         let verified = match options.hash {
             Hash::Sha256 => {
                 let mut h = Sha256::new();
@@ -823,20 +789,22 @@ impl PublicKey {
     
     pub fn derive_public_key(
         n: &BigUint,
-        info: &[u8],
+        metadata: &[u8],
         hash: Hash,
     ) -> Result<PublicKey, Error> {
         let modulus_len = n.to_bytes_be().len();
+        if !modulus_len.is_power_of_two() {
+            return Err(Error::UnsupportedParameters);
+        }
         let lambda_len = modulus_len / 2;
         let hkdf_len = lambda_len + 16;
 
-        // hkdf_input = concat("key", info, 0x00)
-        let mut hkdf_input = Vec::with_capacity(4 + info.len() + 1);
+        let mut hkdf_input = Vec::with_capacity(4 + metadata.len() + 1);
         hkdf_input.extend_from_slice(b"key");
-        hkdf_input.extend_from_slice(info);
+        hkdf_input.extend_from_slice(metadata);
         hkdf_input.push(0x00);
 
-        // hkdf_salt = int_to_bytes(n, modulus_len)
+
         let hkdf_salt = n.to_bytes_be_padded(modulus_len);
 
         // expanded_bytes = HKDF(IKM=hkdf_input, salt=hkdf_salt, info="PBRSA", L=hkdf_len)
@@ -855,15 +823,21 @@ impl PublicKey {
                 hmac_impl.expand(b"PBRSA", &mut expanded_bytes).unwrap();
             }
         }
-        // expanded_bytes[0] &= 0x3F
+
         expanded_bytes[0] &= 0x3F;
-        // expanded_bytes[lambda_len-1] |= 0x01
-        expanded_bytes[lambda_len - 1] |= 0x01;
+        expanded_bytes[(lambda_len) - 1] |= 0x01;
+
         // e' = bytes_to_int(slice(expanded_bytes, 0, lambda_len))
-        let e_prime = BigUint::from_bytes_be(&expanded_bytes[0..lambda_len]);
-        
-        let pk_derived = RsaPublicKey::new(n.clone(), e_prime)
-            .map_err(|_| Error::UnsupportedParameters)?;
+        let mut e_prime = BigUint::from_bytes_be(&expanded_bytes[0..lambda_len]);
+
+        // Ensure e_prime is valid fall back to default e if not
+        let min_valid_exponent = BigUint::from(65537u64);
+        if e_prime < min_valid_exponent {
+            e_prime = min_valid_exponent.clone();
+        }
+
+        let pk_derived = RsaPublicKey::new_unchecked(n.clone(), e_prime);
+
         Ok(PublicKey(pk_derived))
     }
 
@@ -926,51 +900,56 @@ impl SecretKey {
         Ok(BlindSignature(blind_sig.to_bytes_be_padded(modulus_bytes)))
     }
 
-    pub fn partial_blind_sign<R: CryptoRng + RngCore>(
+    pub fn blind_sign_with_metadata<R: CryptoRng + RngCore>(
         &self,
         rng: &mut R,
         blind_msg: impl AsRef<[u8]>,
-        info: &[u8],
+        metadata: &[u8],
         options: &Options,
     ) -> Result<BlindSignature, Error> {
         let modulus_bytes = self.0.size();
-        if blind_msg.as_ref().len() != modulus_bytes {
+        let blind_msg_ref = blind_msg.as_ref();
+
+        if blind_msg_ref.len() != modulus_bytes {
             return Err(Error::UnsupportedParameters);
         }
-        let blind_msg = BigUint::from_bytes_be(blind_msg.as_ref());
+        
+        let blind_msg = BigUint::from_bytes_be(blind_msg_ref);    
+        
         if &blind_msg >= self.0.n() {
             return Err(Error::UnsupportedParameters);
         }
-        let (sk_derived, _pk_derived) = self.derive_key_pair(info, options.hash.clone())?; 
+    
+        let (sk_derived, _pk_derived) = self.derive_key_pair(metadata, options.hash.clone())?;
         let blind_sig = rsa_internals::decrypt_and_check(Some(rng), sk_derived.as_ref(), &blind_msg)
             .map_err(|_| Error::InternalError)?;
         Ok(BlindSignature(blind_sig.to_bytes_be_padded(modulus_bytes)))
     }
+    
 
     pub fn derive_key_pair(
         &self,
-        info: &[u8],
+        metadata: &[u8],
         hash: Hash,
     ) -> Result<(SecretKey, PublicKey), Error> {
-        // (n, e') = DerivePublicKey(n, info)
-        let pk_derived = PublicKey::derive_public_key(self.0.n(), info, hash)?;
+        let pk_derived = PublicKey::derive_public_key(self.n(), metadata, hash)?;
 
-        let p = self.0.primes().to_vec()[0].clone();
-        let q = self.0.primes().to_vec()[1].clone();
+        let p = self.primes().to_vec()[0].clone();
+        let q = self.primes().to_vec()[1].clone();
         let phi = (&p - BigUint::one()) * (&q - BigUint::one());
 
-        // inverse_mod(e', phi)
-        let e_prime = pk_derived.0.e();
+        // d = inverse_mod(e', phi)
+        let e_prime = pk_derived.e();
+
         let d_prime = e_prime.clone().mod_inverse(phi.clone()).unwrap().to_biguint().unwrap(); 
 
         let sk_derived = RsaPrivateKey::from_components(
-            self.0.n().clone(),
-           phi,
+            self.n().clone(),
+            e_prime.clone(),
             d_prime.clone(),
             vec![p,q]
         )
         .map_err(|_| Error::InternalError)?;
-
         Ok((SecretKey(sk_derived), pk_derived))
     }
 
