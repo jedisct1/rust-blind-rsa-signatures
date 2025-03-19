@@ -19,7 +19,7 @@ jobs:
         run: cargo build --verbose
       - name: WASI Build
         run: |
-          rustup target add wasm32-wasi
-          cargo build --verbose --target=wasm32-wasi
+          rustup target add wasm32-wasip1
+          cargo build --verbose --target=wasm32-wasip1
       - name: Run tests
         run: cargo test --verbose
