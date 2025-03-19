@@ -1,6 +1,6 @@
 [package]
 name = "blind-rsa-signatures"
-version = "0.15.1"
+version = "0.15.2"
 authors = ["Frank Denis <github@pureftpd.org>"]
 edition = "2018"
 description = "RSA blind signatures in pure Rust"
@@ -21,7 +21,7 @@ hmac-sha256 = { version = "1.1.8", features = ["traits010"] }
 hmac-sha512 = { version = "1.1.6", features = ["traits010", "sha384"] }
 derive-new = "0.7.0"
 derive_more = { version = "2.0.1", features = ["full"] }
-serde = {version = "1", features = ["derive"], optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
 
 [dev-dependencies]
 criterion = "0.5"
