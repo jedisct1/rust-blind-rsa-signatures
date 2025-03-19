@@ -71,7 +71,7 @@ use rsa::{BigUint, PublicKeyParts as _, RsaPrivateKey, RsaPublicKey};
 use serde::{Deserialize, Serialize};
 
 pub mod reexports {
-    pub use {digest, hmac_sha512, rand, rsa};
+    pub use {digest, hmac_sha256, hmac_sha512, rand, rsa};
 }
 
 mod num_padding;
