@@ -3,23 +3,22 @@
 //! This is an implementation of the [RSA Blind Signatures](https://cfrg.github.io/draft-irtf-cfrg-blind-signatures/draft-irtf-cfrg-rsa-blind-signatures.html) proposal, based on [the Zig implementation](https://github.com/jedisct1/zig-rsa-blind-signatures).
 //!
 //! ```rust
-//! use blind_rsa_signatures::{KeyPair, Options};
+//! use blind_rsa_signatures::{KeyPair, DefaultRng, Options};
 //!
 //! let options = Options::default();
-//! let rng = &mut rand::thread_rng();
 //!
 //! // [SERVER]: Generate a RSA-2048 key pair
-//! let kp = KeyPair::generate(rng, 2048)?;
+//! let kp = KeyPair::generate(&mut DefaultRng, 2048)?;
 //! let (pk, sk) = (kp.pk, kp.sk);
 //!
 //! // [CLIENT]: create a random message and blind it for the server whose public key is `pk`.
 //! // The client must store the message and the secret.
 //! let msg = b"test";
-//! let blinding_result = pk.blind(rng, msg, true, &options)?;
+//! let blinding_result = pk.blind(&mut DefaultRng, msg, true, &options)?;
 //!
 //! // [SERVER]: compute a signature for a blind message, to be sent to the client.
 //! // The client secret should not be sent to the server.
-//! let blind_sig = sk.blind_sign(rng, &blinding_result.blind_msg, &options)?;
+//! let blind_sig = sk.blind_sign(&mut DefaultRng, &blinding_result.blind_msg, &options)?;
 //!
 //! // [CLIENT]: later, when the client wants to redeem a signed blind message,
 //! // using the blinding secret, it can locally compute the signature of the
@@ -57,7 +56,7 @@ use hmac_sha512::Hash as Sha512;
 use num_integer::Integer;
 use num_padding::ToBytesPadded;
 use num_traits::One;
-use rand::{CryptoRng, Rng, RngCore};
+use rand::{CryptoRng, Rng as _, RngCore};
 use rsa::algorithms::mgf1_xor;
 use rsa::internals as rsa_internals;
 use rsa::pkcs1::{DecodeRsaPrivateKey as _, DecodeRsaPublicKey as _};
@@ -140,6 +139,30 @@ impl Options {
     }
 }
 
+/// Default random number generator
+#[derive(Debug, Default, Clone, Copy, Eq, PartialEq)]
+pub struct DefaultRng;
+
+impl CryptoRng for DefaultRng {}
+
+impl RngCore for DefaultRng {
+    fn next_u32(&mut self) -> u32 {
+        rand::random()
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        rand::random()
+    }
+
+    fn fill_bytes(&mut self, dest: &mut [u8]) {
+        rand::thread_rng().fill(dest)
+    }
+
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand::Error> {
+        rand::thread_rng().try_fill(dest)
+    }
+}
+
 /// An RSA public key
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug, Eq, PartialEq, AsRef, Deref, From, Into, new)]
@@ -210,6 +233,47 @@ impl AsRef<[u8]> for BlindSignature {
 impl AsRef<[u8]> for Signature {
     fn as_ref(&self) -> &[u8] {
         self.0.as_slice()
+    }
+}
+
+impl AsRef<[u8]> for MessageRandomizer {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
+impl AsRef<[u8]> for Options {
+    fn as_ref(&self) -> &[u8] {
+        self.hash.as_ref()
+    }
+}
+
+impl AsRef<[u8]> for Hash {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            Hash::Sha256 => b"sha256",
+            Hash::Sha384 => b"sha384",
+            Hash::Sha512 => b"sha512",
+        }
+    }
+}
+
+impl AsRef<[u8]> for BlindingResult {
+    fn as_ref(&self) -> &[u8] {
+        self.blind_msg.as_ref()
+    }
+}
+
+impl AsRef<[u8]> for Error {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            Error::InternalError => b"Internal Error",
+            Error::UnsupportedParameters => b"Unsupported parameters",
+            Error::VerificationFailed => b"Verification failed",
+            Error::EncodingError => b"Encoding error",
+            Error::InvalidKey => b"Invalid key",
+            Error::IncompatibleParameters => b"Incompatible parameters",
+        }
     }
 }
 
