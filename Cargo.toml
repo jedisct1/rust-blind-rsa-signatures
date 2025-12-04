@@ -14,17 +14,17 @@ license = "MIT"
 [dependencies]
 num-integer = "0.1.46"
 num-traits = "0.2.19"
-rand = "0.8.5"
-rsa = { version = "0.8.2", features = ["expose-internals"] }
+rand = "0.9.2"
+rsa = { version = "0.9.9", features = ["hazmat"] }
 digest = "0.10.7"
-hmac-sha256 = { version = "1.1.8", features = ["traits010"] }
-hmac-sha512 = { version = "1.1.6", features = ["traits010", "sha384"] }
+hmac-sha256 = { version = "1.1.12", features = ["traits010"] }
+hmac-sha512 = { version = "1.1.7", features = ["traits010", "sha384"] }
 derive-new = "0.7.0"
 derive_more = { version = "2.0.1", features = ["full"] }
 serde = { version = "1", features = ["derive"], optional = true }
 
 [dev-dependencies]
-criterion = "0.5"
+criterion = "0.7"
 
 [features]
 default = ["serde"]

@@ -56,15 +56,20 @@ use hmac_sha512::Hash as Sha512;
 use num_integer::Integer;
 use num_padding::ToBytesPadded;
 use num_traits::One;
-use rand::{CryptoRng, Rng as _, RngCore};
-use rsa::algorithms::mgf1_xor;
-use rsa::internals as rsa_internals;
 use rsa::pkcs1::{DecodeRsaPrivateKey as _, DecodeRsaPublicKey as _};
 use rsa::pkcs8::{
     DecodePrivateKey as _, DecodePublicKey as _, EncodePrivateKey as _, EncodePublicKey as _,
 };
+use rsa::rand_core::{CryptoRng, RngCore};
 use rsa::signature::hazmat::PrehashVerifier;
-use rsa::{BigUint, PublicKeyParts as _, RsaPrivateKey, RsaPublicKey};
+use rsa::traits::PublicKeyParts as _;
+use rsa::{BigUint, RsaPrivateKey, RsaPublicKey};
+
+mod blind_rsa;
+mod mgf1;
+
+use blind_rsa::{blind as rsa_blind, rsa_decrypt_and_check, unblind as rsa_unblind};
+use mgf1::mgf1_xor;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -155,11 +160,11 @@ impl RngCore for DefaultRng {
     }
 
     fn fill_bytes(&mut self, dest: &mut [u8]) {
-        rand::thread_rng().fill(dest)
+        rsa::rand_core::OsRng.fill_bytes(dest)
     }
 
-    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand::Error> {
-        rand::thread_rng().try_fill(dest)
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rsa::rand_core::Error> {
+        rsa::rand_core::OsRng.try_fill_bytes(dest)
     }
 }
 
@@ -544,7 +549,7 @@ impl PublicKey {
         let modulus_bits = modulus_bytes * 8;
         let msg_randomizer = if randomize_message {
             let mut noise = [0u8; 32];
-            rng.fill(&mut noise[..]);
+            rng.fill_bytes(&mut noise[..]);
             Some(MessageRandomizer(noise))
         } else {
             None
@@ -577,7 +582,7 @@ impl PublicKey {
         };
         let salt_len = options.salt_len();
         let mut salt = vec![0u8; salt_len];
-        rng.fill(&mut salt[..]);
+        rng.fill_bytes(&mut salt[..]);
 
         let padded = match options.hash {
             Hash::Sha256 => {
@@ -595,7 +600,7 @@ impl PublicKey {
             return Err(Error::UnsupportedParameters);
         }
 
-        let (blind_msg, secret) = rsa_internals::blind(rng, self.as_ref(), &m);
+        let (blind_msg, secret) = rsa_blind(rng, self.as_ref(), &m);
         Ok(BlindingResult {
             blind_msg: BlindedMessage(blind_msg.to_bytes_be_padded(modulus_bytes)),
             secret: Secret(secret.to_bytes_be_padded(modulus_bytes)),
@@ -620,8 +625,7 @@ impl PublicKey {
         let blind_sig = BigUint::from_bytes_be(blind_sig);
         let secret = BigUint::from_bytes_be(secret);
         let sig = Signature(
-            rsa_internals::unblind(self.as_ref(), &blind_sig, &secret)
-                .to_bytes_be_padded(modulus_bytes),
+            rsa_unblind(self.as_ref(), &blind_sig, &secret).to_bytes_be_padded(modulus_bytes),
         );
         self.verify(&sig, msg_randomizer, msg, options)?;
         Ok(sig)
@@ -728,7 +732,7 @@ impl SecretKey {
         if &blind_msg >= self.0.n() {
             return Err(Error::UnsupportedParameters);
         }
-        let blind_sig = rsa_internals::decrypt_and_check(Some(rng), self.as_ref(), &blind_msg)
+        let blind_sig = rsa_decrypt_and_check(Some(rng), self.as_ref(), &blind_msg)
             .map_err(|_| Error::InternalError)?;
         Ok(BlindSignature(blind_sig.to_bytes_be_padded(modulus_bytes)))
     }
