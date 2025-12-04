@@ -47,7 +47,7 @@ use std::convert::TryFrom;
 use std::fmt::{self, Display};
 use std::mem;
 
-use derive_more::{Debug, *};
+use derive_more::{AsRef, Debug, Deref, From, Into};
 
 use digest::DynDigest;
 use hmac_sha256::Hash as Sha256;
