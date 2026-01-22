@@ -350,7 +350,7 @@ fn emsa_pss_encode(
 ) -> Result<Vec<u8>, Error> {
     let h_len = hash.output_size();
     let s_len = salt.len();
-    let em_len = (em_bits + 7) / 8;
+    let em_len = em_bits.div_ceil(8);
     if m_hash.len() != h_len {
         return Err(Error::InternalError);
     }
