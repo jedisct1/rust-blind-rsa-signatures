@@ -6,7 +6,7 @@
 
 Author-blinded RSASSA-PSS RSAE signatures.
 
-This is an implementation of the [RSA Blind Signatures](https://www.rfc-editor.org/rfc/rfc9474.html) RFC, based on [the Zig implementation](https://github.com/jedisct1/zig-rsa-blind-signatures).
+This is an implementation of the [RSA Blind Signatures](https://www.rfc-editor.org/rfc/rfc9474.html) (RFC 9474), based on [the Zig implementation](https://github.com/jedisct1/zig-rsa-blind-signatures).
 
 ## Protocol overview
 
@@ -40,11 +40,11 @@ let (pk, sk) = (kp.pk, kp.sk);
 // [CLIENT]: create a random message and blind it for the server whose public key is `pk`.
 // The client must store the message and the secret.
 let msg = b"test";
-let blinding_result = pk.blind(rng, msg, true, &options)?;
+let blinding_result = pk.blind(rng, msg, &options)?;
 
 // [SERVER]: compute a signature for a blind message, to be sent to the client.
 // The client secret should not be sent to the server.
-let blind_sig = sk.blind_sign(rng, &blinding_result.blind_msg, &options)?;
+let blind_sig = sk.blind_sign(&blinding_result.blind_msg, &options)?;
 
 // [CLIENT]: later, when the client wants to redeem a signed blind message,
 // using the blinding secret, it can locally compute the signature of the
@@ -55,8 +55,7 @@ let blind_sig = sk.blind_sign(rng, &blinding_result.blind_msg, &options)?;
 // is correct for the server public key.
 let sig = pk.finalize(
     &blind_sig,
-    &blinding_result.secret,
-    blinding_result.msg_randomizer,
+    &blinding_result,
     &msg,
     &options,
 )?;
@@ -71,4 +70,5 @@ This crate also includes utility functions to import and export keys.
 
 * [Zig](https://github.com/jedisct1/zig-blind-rsa-signatures)
 * [C](https://github.com/jedisct1/blind-rsa-signatures)
-* [Go](https://github.com/cloudflare/circl/tree/master/blindsign)
+* [Go](https://pkg.go.dev/github.com/cloudflare/circl/blindsign/blindrsa)
+* [TypeScript](https://github.com/cloudflare/blindrsa-ts)
