@@ -57,7 +57,7 @@ use rsa::pkcs1::{DecodeRsaPrivateKey as _, DecodeRsaPublicKey as _};
 use rsa::pkcs8::{
     DecodePrivateKey as _, DecodePublicKey as _, EncodePrivateKey as _, EncodePublicKey as _,
 };
-use rsa::rand_core::{CryptoRng, RngCore, TryCryptoRng, TryRngCore};
+use rsa::rand_core::{CryptoRng, TryCryptoRng, TryRngCore};
 use rsa::signature::hazmat::PrehashVerifier;
 use rsa::traits::PublicKeyParts as _;
 use rsa::{RsaPrivateKey, RsaPublicKey};
@@ -315,7 +315,7 @@ impl AsRef<[u8]> for Error {
 
 impl KeyPair {
     /// Generate a new key pair
-    pub fn generate<R: CryptoRng + RngCore>(
+    pub fn generate<R: CryptoRng + ?Sized>(
         rng: &mut R,
         modulus_bits: usize,
     ) -> Result<KeyPair, Error> {
@@ -571,7 +571,7 @@ impl PublicKey {
     }
 
     /// Blind a message (after optional randomization) to be signed
-    pub fn blind<R: CryptoRng + RngCore>(
+    pub fn blind<R: CryptoRng + ?Sized>(
         &self,
         rng: &mut R,
         msg: impl AsRef<[u8]>,

@@ -1,5 +1,5 @@
 use crypto_bigint::{BoxedUint, NonZero, RandomMod};
-use rsa::rand_core::{CryptoRng, RngCore};
+use rsa::rand_core::CryptoRng;
 use rsa::traits::{PrivateKeyParts, PublicKeyParts};
 
 /// Blinds a message using the server's public key and a random factor.
@@ -13,7 +13,7 @@ use rsa::traits::{PrivateKeyParts, PublicKeyParts};
 /// # Returns
 ///
 /// A tuple containing the blinded message and the secret factor
-pub fn blind<R: CryptoRng + RngCore, K: PublicKeyParts>(
+pub fn blind<R: CryptoRng + ?Sized, K: PublicKeyParts>(
     rng: &mut R,
     key: &K,
     c: &BoxedUint,
