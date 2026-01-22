@@ -430,6 +430,7 @@ impl PublicKey {
         Ok(pk)
     }
 
+    #[allow(clippy::identity_op)]
     const fn spki_tpl() -> &'static [u8] {
         const SEQ: u8 = 0x30;
         const EXT: u8 = 0x80;
