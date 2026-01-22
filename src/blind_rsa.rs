@@ -1,7 +1,6 @@
-use num_traits::Zero;
+use crypto_bigint::{BoxedUint, NonZero, RandomMod};
 use rsa::rand_core::{CryptoRng, RngCore};
 use rsa::traits::{PrivateKeyParts, PublicKeyParts};
-use rsa::{BigUint, RsaPrivateKey};
 
 /// Blinds a message using the server's public key and a random factor.
 ///
@@ -9,7 +8,7 @@ use rsa::{BigUint, RsaPrivateKey};
 ///
 /// * `rng` - A cryptographically secure random number generator
 /// * `key` - The public key to use for blinding
-/// * `c` - The message to blind, as a BigUint
+/// * `c` - The message to blind, as a BoxedUint
 ///
 /// # Returns
 ///
@@ -17,30 +16,38 @@ use rsa::{BigUint, RsaPrivateKey};
 pub fn blind<R: CryptoRng + RngCore, K: PublicKeyParts>(
     rng: &mut R,
     key: &K,
-    c: &BigUint,
-) -> (BigUint, BigUint) {
+    c: &BoxedUint,
+) -> (BoxedUint, BoxedUint) {
     // Blinding involves multiplying c by r^e.
     // Then the decryption operation performs (m^e * r^e)^d mod n
     // which equals mr mod n. The factor of r can then be removed
     // by multiplying by the multiplicative inverse of r.
 
-    let mut r: BigUint;
+    let n = key.n();
+    let n_bits = n.bits_precision();
+    let n_params = key.n_params();
+
+    let mut r: BoxedUint;
     let unblinder;
     loop {
-        let mut bytes = [0u8; 32];
-        rng.fill_bytes(&mut bytes);
-        r = BigUint::from_bytes_be(&bytes) % key.n();
-        if r.is_zero() {
-            r = BigUint::from(1u8);
+        // Generate random r in range [1, n)
+        r = BoxedUint::random_mod_vartime(rng, n);
+        if r.is_zero().into() {
+            r = BoxedUint::one_with_precision(n_bits);
         }
-        if let Some(ir) = mod_inverse(&r, key.n()) {
+        if let Some(ir) = r.invert_mod(n).into() {
             unblinder = ir;
             break;
         }
     }
 
-    let blind_factor = r.modpow(key.e(), key.n());
-    let blind_msg = (c * &blind_factor) % key.n();
+    // r^e (mod n)
+    let r_monty = crypto_bigint::modular::BoxedMontyForm::new(r.clone(), n_params);
+    let blind_factor = r_monty.pow(key.e()).retrieve();
+
+    // c * r^e (mod n)
+    let n_nz = NonZero::new(n.as_ref().clone()).expect("modulus is non-zero");
+    let blind_msg = c.mul_mod(&blind_factor, &n_nz);
 
     (blind_msg, unblinder)
 }
@@ -50,14 +57,16 @@ pub fn blind<R: CryptoRng + RngCore, K: PublicKeyParts>(
 /// # Arguments
 ///
 /// * `key` - The public key to use for unblinding
-/// * `m` - The blinded signature, as a BigUint
+/// * `m` - The blinded signature, as a BoxedUint
 /// * `unblinder` - The secret factor used for blinding
 ///
 /// # Returns
 ///
-/// The unblinded signature as a BigUint
-pub fn unblind(key: &impl PublicKeyParts, m: &BigUint, unblinder: &BigUint) -> BigUint {
-    (m * unblinder) % key.n()
+/// The unblinded signature as a BoxedUint
+pub fn unblind(key: &impl PublicKeyParts, m: &BoxedUint, unblinder: &BoxedUint) -> BoxedUint {
+    let n = key.n();
+    let n_nz = NonZero::new(n.as_ref().clone()).expect("modulus is non-zero");
+    m.mul_mod(unblinder, &n_nz)
 }
 
 /// Decrypts a message using the private key, with additional checks.
@@ -66,73 +75,25 @@ pub fn unblind(key: &impl PublicKeyParts, m: &BigUint, unblinder: &BigUint) -> B
 ///
 /// * `rng` - A cryptographically secure random number generator (optional)
 /// * `key` - The private key to use for decryption
-/// * `c` - The message to decrypt, as a BigUint
+/// * `c` - The message to decrypt, as a BoxedUint
 ///
 /// # Returns
 ///
-/// The decrypted message as a BigUint, or an error if decryption failed
+/// The decrypted message as a BoxedUint, or an error if decryption failed
 pub fn rsa_decrypt_and_check<R: CryptoRng + RngCore>(
     _rng: Option<&mut R>,
-    key: &RsaPrivateKey,
-    c: &BigUint,
-) -> Result<BigUint, rsa::errors::Error> {
-    if c >= key.n() {
+    key: &rsa::RsaPrivateKey,
+    c: &BoxedUint,
+) -> Result<BoxedUint, rsa::errors::Error> {
+    let n = key.n();
+    if c >= n.as_ref() {
         return Err(rsa::errors::Error::Decryption);
     }
 
     // In RSA, c^d mod n = m
-    let m = c.modpow(key.d(), key.n());
+    let n_params = key.n_params();
+    let c_monty = crypto_bigint::modular::BoxedMontyForm::new(c.clone(), n_params);
+    let m = c_monty.pow(key.d()).retrieve();
 
     Ok(m)
-}
-
-/// Compute modular inverse using extended Euclidean algorithm
-fn mod_inverse(a: &BigUint, n: &BigUint) -> Option<BigUint> {
-    use num_traits::One;
-
-    // Extended GCD
-    let mut t = BigUint::zero();
-    let mut new_t = BigUint::one();
-    let mut r = n.clone();
-    let mut new_r = a.clone();
-
-    // Track signs separately since we're using unsigned integers
-    let mut t_neg = false;
-    let mut new_t_neg = false;
-
-    while !new_r.is_zero() {
-        let quotient = &r / &new_r;
-
-        // t, new_t = new_t, t - quotient * new_t
-        let qt = &quotient * &new_t;
-        let (next_t, next_t_neg) = if t_neg == new_t_neg {
-            if t >= qt {
-                (t - &qt, t_neg)
-            } else {
-                (&qt - t, !t_neg)
-            }
-        } else {
-            (t + &qt, t_neg)
-        };
-        t = new_t;
-        t_neg = new_t_neg;
-        new_t = next_t;
-        new_t_neg = next_t_neg;
-
-        // r, new_r = new_r, r - quotient * new_r
-        let qr = &quotient * &new_r;
-        let next_r = &r - &qr;
-        r = new_r;
-        new_r = next_r;
-    }
-
-    if r > BigUint::one() {
-        return None; // No inverse exists
-    }
-
-    if t_neg {
-        Some(n - &t)
-    } else {
-        Some(t)
-    }
 }

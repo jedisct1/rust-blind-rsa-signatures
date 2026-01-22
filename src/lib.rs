@@ -43,27 +43,25 @@
 #[macro_use]
 extern crate derive_new;
 
-use std::convert::TryFrom;
+use std::convert::{Infallible, TryFrom};
 use std::fmt::{self, Display};
 use std::mem;
 
+use crypto_bigint::{BoxedUint, Gcd};
 use derive_more::{AsRef, Debug, Deref, From, Into};
 
 use digest::DynDigest;
 use hmac_sha256::Hash as Sha256;
 use hmac_sha512::sha384::Hash as Sha384;
 use hmac_sha512::Hash as Sha512;
-use num_integer::Integer;
-use num_padding::ToBytesPadded;
-use num_traits::One;
 use rsa::pkcs1::{DecodeRsaPrivateKey as _, DecodeRsaPublicKey as _};
 use rsa::pkcs8::{
     DecodePrivateKey as _, DecodePublicKey as _, EncodePrivateKey as _, EncodePublicKey as _,
 };
-use rsa::rand_core::{CryptoRng, RngCore};
+use rsa::rand_core::{CryptoRng, RngCore, TryCryptoRng, TryRngCore};
 use rsa::signature::hazmat::PrehashVerifier;
 use rsa::traits::PublicKeyParts as _;
-use rsa::{BigUint, RsaPrivateKey, RsaPublicKey};
+use rsa::{RsaPrivateKey, RsaPublicKey};
 
 mod blind_rsa;
 mod mgf1;
@@ -75,10 +73,21 @@ use mgf1::mgf1_xor;
 use serde::{Deserialize, Serialize};
 
 pub mod reexports {
-    pub use {digest, hmac_sha256, hmac_sha512, rand, rsa};
+    pub use {crypto_bigint, digest, hmac_sha256, hmac_sha512, rand, rsa};
 }
 
-mod num_padding;
+/// Returns the byte representation of a BoxedUint in big-endian byte order,
+/// left-padding the number with zeroes to the specified length.
+fn to_bytes_be_padded(n: &BoxedUint, len: usize) -> Vec<u8> {
+    let bytes = n.to_be_bytes();
+    if len > bytes.len() {
+        let mut result = vec![0u8; len];
+        result[len - bytes.len()..].copy_from_slice(&bytes);
+        result
+    } else {
+        bytes.to_vec()
+    }
+}
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Error {
@@ -148,25 +157,24 @@ impl Options {
 #[derive(Debug, Default, Clone, Copy, Eq, PartialEq)]
 pub struct DefaultRng;
 
-impl CryptoRng for DefaultRng {}
+impl TryRngCore for DefaultRng {
+    type Error = Infallible;
 
-impl RngCore for DefaultRng {
-    fn next_u32(&mut self) -> u32 {
-        rand::random()
+    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
+        Ok(rand::random())
     }
 
-    fn next_u64(&mut self) -> u64 {
-        rand::random()
+    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
+        Ok(rand::random())
     }
 
-    fn fill_bytes(&mut self, dest: &mut [u8]) {
-        rsa::rand_core::OsRng.fill_bytes(dest)
-    }
-
-    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rsa::rand_core::Error> {
-        rsa::rand_core::OsRng.try_fill_bytes(dest)
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Self::Error> {
+        rand::fill(dest);
+        Ok(())
     }
 }
+
+impl TryCryptoRng for DefaultRng {}
 
 /// An RSA public key
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -358,9 +366,9 @@ impl PublicKey {
             return Err(Error::UnsupportedParameters);
         }
         let e = pk.e();
-        let e3 = BigUint::from(3u32);
-        let ef4 = BigUint::from(65537u32);
-        if ![e3, ef4].contains(e) {
+        let e3 = BoxedUint::from(3u32);
+        let ef4 = BoxedUint::from(65537u32);
+        if e != &e3 && e != &ef4 {
             return Err(Error::UnsupportedParameters);
         }
         Ok(())
@@ -595,15 +603,18 @@ impl PublicKey {
                 emsa_pss_encode(&msg_hash, modulus_bits - 1, &salt, &mut Sha512::new())?
             }
         };
-        let m = BigUint::from_bytes_be(&padded);
-        if m.gcd(self.0.n()) != BigUint::one() {
+        let n = self.0.n();
+        let n_bits = n.bits_precision();
+        let m = BoxedUint::from_be_slice(&padded, n_bits).map_err(|_| Error::InternalError)?;
+        let one = BoxedUint::one_with_precision(n_bits);
+        if m.gcd(n.as_ref()) != one {
             return Err(Error::UnsupportedParameters);
         }
 
         let (blind_msg, secret) = rsa_blind(rng, self.as_ref(), &m);
         Ok(BlindingResult {
-            blind_msg: BlindedMessage(blind_msg.to_bytes_be_padded(modulus_bytes)),
-            secret: Secret(secret.to_bytes_be_padded(modulus_bytes)),
+            blind_msg: BlindedMessage(to_bytes_be_padded(&blind_msg, modulus_bytes)),
+            secret: Secret(to_bytes_be_padded(&secret, modulus_bytes)),
             msg_randomizer,
         })
     }
@@ -622,11 +633,15 @@ impl PublicKey {
         if blind_sig.len() != modulus_bytes || secret.len() != modulus_bytes {
             return Err(Error::UnsupportedParameters);
         }
-        let blind_sig = BigUint::from_bytes_be(blind_sig);
-        let secret = BigUint::from_bytes_be(secret);
-        let sig = Signature(
-            rsa_unblind(self.as_ref(), &blind_sig, &secret).to_bytes_be_padded(modulus_bytes),
-        );
+        let n_bits = self.0.n().bits_precision();
+        let blind_sig_uint =
+            BoxedUint::from_be_slice(blind_sig, n_bits).map_err(|_| Error::InternalError)?;
+        let secret_uint =
+            BoxedUint::from_be_slice(secret, n_bits).map_err(|_| Error::InternalError)?;
+        let sig = Signature(to_bytes_be_padded(
+            &rsa_unblind(self.as_ref(), &blind_sig_uint, &secret_uint),
+            modulus_bytes,
+        ));
         self.verify(&sig, msg_randomizer, msg, options)?;
         Ok(sig)
     }
@@ -728,12 +743,17 @@ impl SecretKey {
         if blind_msg.as_ref().len() != modulus_bytes {
             return Err(Error::UnsupportedParameters);
         }
-        let blind_msg = BigUint::from_bytes_be(blind_msg.as_ref());
-        if &blind_msg >= self.0.n() {
+        let n_bits = self.0.n().bits_precision();
+        let blind_msg_uint = BoxedUint::from_be_slice(blind_msg.as_ref(), n_bits)
+            .map_err(|_| Error::InternalError)?;
+        if &blind_msg_uint >= self.0.n().as_ref() {
             return Err(Error::UnsupportedParameters);
         }
-        let blind_sig = rsa_decrypt_and_check(Some(rng), self.as_ref(), &blind_msg)
+        let blind_sig = rsa_decrypt_and_check(Some(rng), self.as_ref(), &blind_msg_uint)
             .map_err(|_| Error::InternalError)?;
-        Ok(BlindSignature(blind_sig.to_bytes_be_padded(modulus_bytes)))
+        Ok(BlindSignature(to_bytes_be_padded(
+            &blind_sig,
+            modulus_bytes,
+        )))
     }
 }
