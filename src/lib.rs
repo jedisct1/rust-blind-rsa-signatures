@@ -421,10 +421,13 @@ impl PublicKey {
             return Err(Error::EncodingError);
         }
         let pem = pem.trim();
-        Ok(rsa::RsaPublicKey::from_public_key_pem(pem)
-            .or_else(|_| rsa::RsaPublicKey::from_pkcs1_pem(pem))
-            .map_err(|_| Error::EncodingError)?
-            .into())
+        let pk = PublicKey(
+            rsa::RsaPublicKey::from_public_key_pem(pem)
+                .or_else(|_| rsa::RsaPublicKey::from_pkcs1_pem(pem))
+                .map_err(|_| Error::EncodingError)?,
+        );
+        pk.check_rsa_parameters()?;
+        Ok(pk)
     }
 
     const fn spki_tpl() -> &'static [u8] {
