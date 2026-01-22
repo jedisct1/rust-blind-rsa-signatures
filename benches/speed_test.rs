@@ -13,46 +13,30 @@ pub fn protocol(c: &mut Criterion) {
 
         group.bench_function(BenchmarkId::new("blind", key_size), |b| {
             b.iter(|| {
-                _ = pk.blind(&mut DefaultRng, msg, true, &options).unwrap();
+                _ = pk.blind(&mut DefaultRng, msg, &options).unwrap();
             })
         });
 
-        let blinding_result = pk.blind(&mut DefaultRng, msg, true, &options).unwrap();
+        let blinding_result = pk.blind(&mut DefaultRng, msg, &options).unwrap();
 
         group.bench_function(BenchmarkId::new("blind_sign", key_size), |b| {
             b.iter(|| {
-                _ = sk
-                    .blind_sign(&mut DefaultRng, &blinding_result.blind_msg, &options)
-                    .unwrap();
+                _ = sk.blind_sign(&blinding_result.blind_msg, &options).unwrap();
             })
         });
 
-        let blind_sig = sk
-            .blind_sign(&mut DefaultRng, &blinding_result.blind_msg, &options)
-            .unwrap();
+        let blind_sig = sk.blind_sign(&blinding_result.blind_msg, &options).unwrap();
 
         group.bench_function(BenchmarkId::new("finalize", key_size), |b| {
             b.iter(|| {
                 _ = pk
-                    .finalize(
-                        &blind_sig,
-                        &blinding_result.secret,
-                        blinding_result.msg_randomizer,
-                        msg,
-                        &options,
-                    )
+                    .finalize(&blind_sig, &blinding_result, msg, &options)
                     .unwrap();
             })
         });
 
         let sig = pk
-            .finalize(
-                &blind_sig,
-                &blinding_result.secret,
-                blinding_result.msg_randomizer,
-                msg,
-                &options,
-            )
+            .finalize(&blind_sig, &blinding_result, msg, &options)
             .unwrap();
 
         group.bench_function(BenchmarkId::new("verify", key_size), |b| {

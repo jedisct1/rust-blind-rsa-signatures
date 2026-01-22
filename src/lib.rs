@@ -14,11 +14,11 @@
 //! // [CLIENT]: create a random message and blind it for the server whose public key is `pk`.
 //! // The client must store the message and the secret.
 //! let msg = b"test";
-//! let blinding_result = pk.blind(&mut DefaultRng, msg, true, &options)?;
+//! let blinding_result = pk.blind(&mut DefaultRng, msg, &options)?;
 //!
 //! // [SERVER]: compute a signature for a blind message, to be sent to the client.
 //! // The client secret should not be sent to the server.
-//! let blind_sig = sk.blind_sign(&mut DefaultRng, &blinding_result.blind_msg, &options)?;
+//! let blind_sig = sk.blind_sign(&blinding_result.blind_msg, &options)?;
 //!
 //! // [CLIENT]: later, when the client wants to redeem a signed blind message,
 //! // using the blinding secret, it can locally compute the signature of the
@@ -29,8 +29,7 @@
 //! // is correct for the server public key.
 //! let sig = pk.finalize(
 //!     &blind_sig,
-//!     &blinding_result.secret,
-//!     blinding_result.msg_randomizer,
+//!     &blinding_result,
 //!     &msg,
 //!     &options,
 //! )?;
@@ -50,7 +49,7 @@ use std::mem;
 use crypto_bigint::{BoxedUint, Gcd};
 use derive_more::{AsRef, Debug, Deref, From, Into};
 
-use digest::DynDigest;
+use digest::{typenum::Unsigned, DynDigest, OutputSizeUser};
 use hmac_sha256::Hash as Sha256;
 use hmac_sha512::sha384::Hash as Sha384;
 use hmac_sha512::Hash as Sha512;
@@ -122,33 +121,57 @@ pub enum Hash {
     Sha512,
 }
 
+/// PSS mode to specify the use of salt
+#[derive(Clone, Debug, Eq, PartialEq, From, new)]
+pub enum PSSMode {
+    PSS,
+    PSSZero,
+}
+
+/// Prepare mode to specify whether or not to randomize the message
+#[derive(Clone, Debug, Eq, PartialEq, From, new)]
+pub enum PrepareMode {
+    Randomized,
+    Deterministic,
+}
+
 /// Options
 #[derive(Clone, Debug, Eq, PartialEq, AsRef, From, Into, new)]
 pub struct Options {
     /// Hash function to use for padding and for hashing the message
     hash: Hash,
-    /// Use deterministic padding
-    deterministic: bool,
-    /// Salt length (ignored in deterministic mode)
-    salt_len: usize,
+    /// Either `PSSMode::PSS` to use salt, or `PSSMode::PSSZero` for empty salt
+    pss_mode: PSSMode,
+    /// Use deterministic or randomized message padding
+    prepare: PrepareMode,
 }
 
 impl Default for Options {
     fn default() -> Self {
-        Options {
+        Self {
             hash: Hash::Sha384,
-            deterministic: false,
-            salt_len: hmac_sha512::sha384::Hash::new().output_size(),
+            pss_mode: PSSMode::PSS,
+            prepare: PrepareMode::Randomized,
         }
     }
 }
 
 impl Options {
-    fn salt_len(&self) -> usize {
-        if self.deterministic {
-            0
-        } else {
-            self.salt_len
+    pub const fn salt_len(&self) -> usize {
+        match self.pss_mode {
+            PSSMode::PSS => match self.hash {
+                Hash::Sha256 => <<Sha256 as OutputSizeUser>::OutputSize as Unsigned>::USIZE,
+                Hash::Sha384 => <<Sha384 as OutputSizeUser>::OutputSize as Unsigned>::USIZE,
+                Hash::Sha512 => <<Sha512 as OutputSizeUser>::OutputSize as Unsigned>::USIZE,
+            },
+            PSSMode::PSSZero => 0,
+        }
+    }
+
+    pub const fn is_randomized(&self) -> bool {
+        match self.prepare {
+            PrepareMode::Deterministic => false,
+            PrepareMode::Randomized => true,
         }
     }
 }
@@ -549,13 +572,12 @@ impl PublicKey {
         &self,
         rng: &mut R,
         msg: impl AsRef<[u8]>,
-        randomize_message: bool,
         options: &Options,
     ) -> Result<BlindingResult, Error> {
         let msg = msg.as_ref();
         let modulus_bytes = self.0.size();
         let modulus_bits = modulus_bytes * 8;
-        let msg_randomizer = if randomize_message {
+        let msg_randomizer = if options.is_randomized() {
             let mut noise = [0u8; 32];
             rng.fill_bytes(&mut noise[..]);
             Some(MessageRandomizer(noise))
@@ -624,25 +646,24 @@ impl PublicKey {
     pub fn finalize(
         &self,
         blind_sig: &BlindSignature,
-        secret: &Secret,
-        msg_randomizer: Option<MessageRandomizer>,
+        result: &BlindingResult,
         msg: impl AsRef<[u8]>,
         options: &Options,
     ) -> Result<Signature, Error> {
         let modulus_bytes = self.0.size();
-        if blind_sig.len() != modulus_bytes || secret.len() != modulus_bytes {
+        if blind_sig.len() != modulus_bytes || result.secret.len() != modulus_bytes {
             return Err(Error::UnsupportedParameters);
         }
         let n_bits = self.0.n().bits_precision();
         let blind_sig_uint =
             BoxedUint::from_be_slice(blind_sig, n_bits).map_err(|_| Error::InternalError)?;
         let secret_uint =
-            BoxedUint::from_be_slice(secret, n_bits).map_err(|_| Error::InternalError)?;
+            BoxedUint::from_be_slice(&result.secret, n_bits).map_err(|_| Error::InternalError)?;
         let sig = Signature(to_bytes_be_padded(
             &rsa_unblind(self.as_ref(), &blind_sig_uint, &secret_uint),
             modulus_bytes,
         ));
-        self.verify(&sig, msg_randomizer, msg, options)?;
+        self.verify(&sig, result.msg_randomizer, msg, options)?;
         Ok(sig)
     }
 
@@ -661,6 +682,7 @@ impl PublicKey {
         }
         let sig_ =
             rsa::pss::Signature::try_from(sig.as_ref()).map_err(|_| Error::VerificationFailed)?;
+        let salt_len = options.salt_len();
         let verified = match options.hash {
             Hash::Sha256 => {
                 let mut h = Sha256::new();
@@ -669,7 +691,8 @@ impl PublicKey {
                 }
                 h.update(msg);
                 let h = h.finalize().to_vec();
-                rsa::pss::VerifyingKey::<Sha256>::new(self.0.clone()).verify_prehash(&h, &sig_)
+                rsa::pss::VerifyingKey::<Sha256>::new_with_salt_len(self.0.clone(), salt_len)
+                    .verify_prehash(&h, &sig_)
             }
             Hash::Sha384 => {
                 let mut h = Sha384::new();
@@ -678,7 +701,8 @@ impl PublicKey {
                 }
                 h.update(msg);
                 let h = h.finalize().to_vec();
-                rsa::pss::VerifyingKey::<Sha384>::new(self.0.clone()).verify_prehash(&h, &sig_)
+                rsa::pss::VerifyingKey::<Sha384>::new_with_salt_len(self.0.clone(), salt_len)
+                    .verify_prehash(&h, &sig_)
             }
             Hash::Sha512 => {
                 let mut h = Sha512::new();
@@ -687,7 +711,8 @@ impl PublicKey {
                 }
                 h.update(msg);
                 let h = h.finalize().to_vec();
-                rsa::pss::VerifyingKey::<Sha512>::new(self.0.clone()).verify_prehash(&h, &sig_)
+                rsa::pss::VerifyingKey::<Sha512>::new_with_salt_len(self.0.clone(), salt_len)
+                    .verify_prehash(&h, &sig_)
             }
         };
         verified.map_err(|_| Error::VerificationFailed)?;
@@ -733,9 +758,8 @@ impl SecretKey {
     }
 
     /// Sign a blinded message
-    pub fn blind_sign<R: CryptoRng + RngCore>(
+    pub fn blind_sign(
         &self,
-        rng: &mut R,
         blind_msg: impl AsRef<[u8]>,
         _options: &Options,
     ) -> Result<BlindSignature, Error> {
@@ -749,7 +773,7 @@ impl SecretKey {
         if &blind_msg_uint >= self.0.n().as_ref() {
             return Err(Error::UnsupportedParameters);
         }
-        let blind_sig = rsa_decrypt_and_check(Some(rng), self.as_ref(), &blind_msg_uint)
+        let blind_sig = rsa_decrypt_and_check(self.as_ref(), &blind_msg_uint)
             .map_err(|_| Error::InternalError)?;
         Ok(BlindSignature(to_bytes_be_padded(
             &blind_sig,

@@ -42,7 +42,7 @@ pub fn blind<R: CryptoRng + RngCore, K: PublicKeyParts>(
     }
 
     // r^e (mod n)
-    let r_monty = crypto_bigint::modular::BoxedMontyForm::new(r.clone(), n_params);
+    let r_monty = crypto_bigint::modular::BoxedMontyForm::new(r, n_params);
     let blind_factor = r_monty.pow(key.e()).retrieve();
 
     // c * r^e (mod n)
@@ -80,8 +80,7 @@ pub fn unblind(key: &impl PublicKeyParts, m: &BoxedUint, unblinder: &BoxedUint) 
 /// # Returns
 ///
 /// The decrypted message as a BoxedUint, or an error if decryption failed
-pub fn rsa_decrypt_and_check<R: CryptoRng + RngCore>(
-    _rng: Option<&mut R>,
+pub fn rsa_decrypt_and_check(
     key: &rsa::RsaPrivateKey,
     c: &BoxedUint,
 ) -> Result<BoxedUint, rsa::errors::Error> {
