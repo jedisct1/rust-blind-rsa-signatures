@@ -122,6 +122,27 @@ pub enum Hash {
     Sha512,
 }
 
+impl Hash {
+    /// Create a new boxed hasher for this hash algorithm
+    fn new_hasher(&self) -> Box<dyn DynDigest> {
+        match self {
+            Hash::Sha256 => Box::new(Sha256::new()),
+            Hash::Sha384 => Box::new(Sha384::new()),
+            Hash::Sha512 => Box::new(Sha512::new()),
+        }
+    }
+
+    /// Hash a message with an optional prefix
+    fn hash_message(&self, prefix: Option<&[u8]>, msg: &[u8]) -> Vec<u8> {
+        let mut h = self.new_hasher();
+        if let Some(p) = prefix {
+            h.update(p);
+        }
+        h.update(msg);
+        h.finalize().to_vec()
+    }
+}
+
 /// PSS mode to specify the use of salt
 #[derive(Clone, Debug, Eq, PartialEq, From, new)]
 pub enum PSSMode {
@@ -170,10 +191,7 @@ impl Options {
     }
 
     pub const fn is_randomized(&self) -> bool {
-        match self.prepare {
-            PrepareMode::Deterministic => false,
-            PrepareMode::Randomized => true,
-        }
+        matches!(self.prepare, PrepareMode::Randomized)
     }
 }
 
@@ -589,47 +607,19 @@ impl PublicKey {
         } else {
             None
         };
-        let msg_hash = match options.hash {
-            Hash::Sha256 => {
-                let mut h = Sha256::new();
-                if let Some(p) = msg_randomizer.as_ref() {
-                    h.update(p.0);
-                }
-                h.update(msg);
-                h.finalize().to_vec()
-            }
-            Hash::Sha384 => {
-                let mut h = Sha384::new();
-                if let Some(p) = msg_randomizer.as_ref() {
-                    h.update(p.0);
-                }
-                h.update(msg);
-                h.finalize().to_vec()
-            }
-            Hash::Sha512 => {
-                let mut h = Sha512::new();
-                if let Some(p) = msg_randomizer.as_ref() {
-                    h.update(p.0);
-                }
-                h.update(msg);
-                h.finalize().to_vec()
-            }
-        };
+        let msg_hash = options
+            .hash
+            .hash_message(msg_randomizer.as_ref().map(|r| r.0.as_slice()), msg);
         let salt_len = options.salt_len();
         let mut salt = vec![0u8; salt_len];
         rng.fill_bytes(&mut salt[..]);
 
-        let padded = match options.hash {
-            Hash::Sha256 => {
-                emsa_pss_encode(&msg_hash, modulus_bits - 1, &salt, &mut Sha256::new())?
-            }
-            Hash::Sha384 => {
-                emsa_pss_encode(&msg_hash, modulus_bits - 1, &salt, &mut Sha384::new())?
-            }
-            Hash::Sha512 => {
-                emsa_pss_encode(&msg_hash, modulus_bits - 1, &salt, &mut Sha512::new())?
-            }
-        };
+        let padded = emsa_pss_encode(
+            &msg_hash,
+            modulus_bits - 1,
+            &salt,
+            &mut *options.hash.new_hasher(),
+        )?;
         let n = self.0.n();
         let n_bits = n.bits_precision();
         let m = BoxedUint::from_be_slice(&padded, n_bits).map_err(|_| Error::InternalError)?;
@@ -688,36 +678,21 @@ impl PublicKey {
         let sig_ =
             rsa::pss::Signature::try_from(sig.as_ref()).map_err(|_| Error::VerificationFailed)?;
         let salt_len = options.salt_len();
+        let msg_hash = options
+            .hash
+            .hash_message(msg_randomizer.as_ref().map(|r| r.0.as_slice()), msg);
         let verified = match options.hash {
             Hash::Sha256 => {
-                let mut h = Sha256::new();
-                if let Some(p) = msg_randomizer.as_ref() {
-                    h.update(p.0);
-                }
-                h.update(msg);
-                let h = h.finalize().to_vec();
                 rsa::pss::VerifyingKey::<Sha256>::new_with_salt_len(self.0.clone(), salt_len)
-                    .verify_prehash(&h, &sig_)
+                    .verify_prehash(&msg_hash, &sig_)
             }
             Hash::Sha384 => {
-                let mut h = Sha384::new();
-                if let Some(p) = msg_randomizer.as_ref() {
-                    h.update(p.0);
-                }
-                h.update(msg);
-                let h = h.finalize().to_vec();
                 rsa::pss::VerifyingKey::<Sha384>::new_with_salt_len(self.0.clone(), salt_len)
-                    .verify_prehash(&h, &sig_)
+                    .verify_prehash(&msg_hash, &sig_)
             }
             Hash::Sha512 => {
-                let mut h = Sha512::new();
-                if let Some(p) = msg_randomizer.as_ref() {
-                    h.update(p.0);
-                }
-                h.update(msg);
-                let h = h.finalize().to_vec();
                 rsa::pss::VerifyingKey::<Sha512>::new_with_salt_len(self.0.clone(), salt_len)
-                    .verify_prehash(&h, &sig_)
+                    .verify_prehash(&msg_hash, &sig_)
             }
         };
         verified.map_err(|_| Error::VerificationFailed)?;

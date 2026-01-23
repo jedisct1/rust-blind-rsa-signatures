@@ -8,32 +8,20 @@ use digest::DynDigest;
 /// * `hash` - The hash function to use
 /// * `src` - The source data
 pub fn mgf1_xor(dst: &mut [u8], hash: &mut dyn DynDigest, src: &[u8]) {
-    let mut counter = [0u8; 4];
+    let mut counter: u32 = 0;
     let mut i = 0;
     while i < dst.len() {
         let mut h = hash.box_clone();
         h.update(src);
-        h.update(&counter);
+        h.update(&counter.to_be_bytes());
         let digest = h.finalize_reset();
 
-        let j_max = if i + digest.len() <= dst.len() {
-            digest.len()
-        } else {
-            dst.len() - i
-        };
-
-        for j in 0..j_max {
-            dst[i + j] ^= digest[j];
+        let chunk_len = digest.len().min(dst.len() - i);
+        for (d, s) in dst[i..][..chunk_len].iter_mut().zip(&*digest) {
+            *d ^= s;
         }
 
         i += digest.len();
-
-        // Increment counter
-        for k in (0..4).rev() {
-            counter[k] = counter[k].wrapping_add(1);
-            if counter[k] != 0 {
-                break;
-            }
-        }
+        counter = counter.wrapping_add(1);
     }
 }
