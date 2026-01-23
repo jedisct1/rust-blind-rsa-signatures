@@ -1,6 +1,6 @@
 use crypto_bigint::{BoxedUint, NonZero, RandomMod};
 use rsa::rand_core::CryptoRng;
-use rsa::traits::{PrivateKeyParts, PublicKeyParts};
+use rsa::traits::PublicKeyParts;
 
 /// Blinds a message using the server's public key and a random factor.
 ///
@@ -67,32 +67,4 @@ pub fn unblind(key: &impl PublicKeyParts, m: &BoxedUint, unblinder: &BoxedUint) 
     let n = key.n();
     let n_nz = NonZero::new(n.as_ref().clone()).expect("modulus is non-zero");
     m.mul_mod(unblinder, &n_nz)
-}
-
-/// Decrypts a message using the private key, with additional checks.
-///
-/// # Arguments
-///
-/// * `rng` - A cryptographically secure random number generator (optional)
-/// * `key` - The private key to use for decryption
-/// * `c` - The message to decrypt, as a BoxedUint
-///
-/// # Returns
-///
-/// The decrypted message as a BoxedUint, or an error if decryption failed
-pub fn rsa_decrypt_and_check(
-    key: &rsa::RsaPrivateKey,
-    c: &BoxedUint,
-) -> Result<BoxedUint, rsa::errors::Error> {
-    let n = key.n();
-    if c >= n.as_ref() {
-        return Err(rsa::errors::Error::Decryption);
-    }
-
-    // In RSA, c^d mod n = m
-    let n_params = key.n_params();
-    let c_monty = crypto_bigint::modular::BoxedMontyForm::new(c.clone(), n_params);
-    let m = c_monty.pow(key.d()).retrieve();
-
-    Ok(m)
 }

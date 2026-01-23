@@ -53,6 +53,7 @@ use digest::{typenum::Unsigned, DynDigest, OutputSizeUser};
 use hmac_sha256::Hash as Sha256;
 use hmac_sha512::sha384::Hash as Sha384;
 use hmac_sha512::Hash as Sha512;
+use rsa::hazmat::rsa_decrypt_and_check;
 use rsa::pkcs1::{DecodeRsaPrivateKey as _, DecodeRsaPublicKey as _};
 use rsa::pkcs8::{
     DecodePrivateKey as _, DecodePublicKey as _, EncodePrivateKey as _, EncodePublicKey as _,
@@ -65,7 +66,7 @@ use rsa::{RsaPrivateKey, RsaPublicKey};
 mod blind_rsa;
 mod mgf1;
 
-use blind_rsa::{blind as rsa_blind, rsa_decrypt_and_check, unblind as rsa_unblind};
+use blind_rsa::{blind as rsa_blind, unblind as rsa_unblind};
 use mgf1::mgf1_xor;
 
 #[cfg(feature = "serde")]
@@ -767,6 +768,16 @@ impl SecretKey {
         blind_msg: impl AsRef<[u8]>,
         _options: &Options,
     ) -> Result<BlindSignature, Error> {
+        let mut rng = DefaultRng;
+        self.blind_sign_with_rng(&mut rng, blind_msg)
+    }
+
+    /// Sign a blinded message using the provided RNG for RSA blinding.
+    pub fn blind_sign_with_rng<R: TryCryptoRng + ?Sized>(
+        &self,
+        rng: &mut R,
+        blind_msg: impl AsRef<[u8]>,
+    ) -> Result<BlindSignature, Error> {
         let modulus_bytes = self.0.size();
         if blind_msg.as_ref().len() != modulus_bytes {
             return Err(Error::UnsupportedParameters);
@@ -777,7 +788,7 @@ impl SecretKey {
         if &blind_msg_uint >= self.0.n().as_ref() {
             return Err(Error::UnsupportedParameters);
         }
-        let blind_sig = rsa_decrypt_and_check(self.as_ref(), &blind_msg_uint)
+        let blind_sig = rsa_decrypt_and_check(self.as_ref(), Some(rng), &blind_msg_uint)
             .map_err(|_| Error::InternalError)?;
         Ok(BlindSignature(to_bytes_be_padded(
             &blind_sig,
