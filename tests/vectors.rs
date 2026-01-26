@@ -62,7 +62,7 @@ fn parse_bytes<'a, D: Deserializer<'a>>(d: D) -> Result<Vec<u8>, D::Error> {
 
 struct MockRandom(Vec<Vec<u8>>);
 impl rsa::rand_core::TryCryptoRng for MockRandom {}
-impl rsa::rand_core::TryRngCore for MockRandom {
+impl rsa::rand_core::TryRng for MockRandom {
     type Error = core::convert::Infallible;
     fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
         unimplemented!()
@@ -133,7 +133,7 @@ fn rfc9474() {
         assert_eq!(result.blind_msg.0, vector.blinded_msg);
 
         // Server signs a blinded message producing a blinded signature.
-        let blinded_sig = sk.blind_sign(&result.blind_msg, &options).unwrap();
+        let blinded_sig = sk.blind_sign(&result.blind_msg).unwrap();
         assert_eq!(blinded_sig.0, vector.blind_sig);
 
         // Client computes the final RSA signature.

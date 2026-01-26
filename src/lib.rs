@@ -18,13 +18,13 @@
 //!
 //! // [SERVER]: compute a signature for a blind message, to be sent to the client.
 //! // The client secret should not be sent to the server.
-//! let blind_sig = sk.blind_sign(&blinding_result.blind_msg, &options)?;
+//! let blind_sig = sk.blind_sign(&blinding_result.blind_msg)?;
 //!
 //! // [CLIENT]: later, when the client wants to redeem a signed blind message,
 //! // using the blinding secret, it can locally compute the signature of the
 //! // original message.
 //! // The client then owns a new valid (message, signature) pair, and the
-//! // server cannot link it to a previous(blinded message, blind signature) pair.
+//! // server cannot link it to a previous (blinded message, blind signature) pair.
 //! // Note that the finalization function also verifies that the new signature
 //! // is correct for the server public key.
 //! let sig = pk.finalize(
@@ -58,7 +58,7 @@ use rsa::pkcs1::{DecodeRsaPrivateKey as _, DecodeRsaPublicKey as _};
 use rsa::pkcs8::{
     DecodePrivateKey as _, DecodePublicKey as _, EncodePrivateKey as _, EncodePublicKey as _,
 };
-use rsa::rand_core::{CryptoRng, TryCryptoRng, TryRngCore};
+use rsa::rand_core::{CryptoRng, TryCryptoRng, TryRng};
 use rsa::signature::hazmat::PrehashVerifier;
 use rsa::traits::PublicKeyParts as _;
 use rsa::{RsaPrivateKey, RsaPublicKey};
@@ -199,7 +199,7 @@ impl Options {
 #[derive(Debug, Default, Clone, Copy, Eq, PartialEq)]
 pub struct DefaultRng;
 
-impl TryRngCore for DefaultRng {
+impl TryRng for DefaultRng {
     type Error = Infallible;
 
     fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
@@ -562,7 +562,7 @@ impl PublicKey {
         Ok(out)
     }
 
-    pub fn from_spki(spki: &[u8], _options: Option<&Options>) -> Result<Self, Error> {
+    pub fn from_spki(spki: &[u8]) -> Result<Self, Error> {
         if spki.len() > 800 {
             return Err(Error::EncodingError);
         }
@@ -738,11 +738,7 @@ impl SecretKey {
     }
 
     /// Sign a blinded message
-    pub fn blind_sign(
-        &self,
-        blind_msg: impl AsRef<[u8]>,
-        _options: &Options,
-    ) -> Result<BlindSignature, Error> {
+    pub fn blind_sign(&self, blind_msg: impl AsRef<[u8]>) -> Result<BlindSignature, Error> {
         let mut rng = DefaultRng;
         self.blind_sign_with_rng(&mut rng, blind_msg)
     }
