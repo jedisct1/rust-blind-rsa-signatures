@@ -18,7 +18,7 @@
 //!
 //! // [SERVER]: compute a signature for a blind message, to be sent to the client.
 //! // The client secret should not be sent to the server.
-//! let blind_sig = sk.blind_sign(&blinding_result.blind_msg)?;
+//! let blind_sig = sk.blind_sign(&blinding_result.blind_message)?;
 //!
 //! // [CLIENT]: later, when the client wants to redeem a signed blind message,
 //! // using the blinding secret, it can locally compute the signature of the
@@ -239,10 +239,10 @@ pub struct KeyPair {
 #[derive(Clone, Debug, AsRef, Deref, From, Into, new)]
 pub struct Secret(pub Vec<u8>);
 
-/// A blinded message
+/// A blind message
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug, AsRef, Deref, From, Into, new)]
-pub struct BlindedMessage(pub Vec<u8>);
+pub struct BlindMessage(pub Vec<u8>);
 
 /// A blind signature
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -262,7 +262,7 @@ pub struct MessageRandomizer(pub [u8; 32]);
 /// Result of a blinding operation
 #[derive(Clone, Debug)]
 pub struct BlindingResult {
-    pub blind_msg: BlindedMessage,
+    pub blind_message: BlindMessage,
     pub secret: Secret,
     pub msg_randomizer: Option<MessageRandomizer>,
 }
@@ -273,7 +273,7 @@ impl AsRef<[u8]> for Secret {
     }
 }
 
-impl AsRef<[u8]> for BlindedMessage {
+impl AsRef<[u8]> for BlindMessage {
     fn as_ref(&self) -> &[u8] {
         self.0.as_slice()
     }
@@ -315,7 +315,7 @@ impl AsRef<[u8]> for Hash {
 
 impl AsRef<[u8]> for BlindingResult {
     fn as_ref(&self) -> &[u8] {
-        self.blind_msg.as_ref()
+        self.blind_message.as_ref()
     }
 }
 
@@ -630,7 +630,7 @@ impl PublicKey {
 
         let (blind_msg, secret) = rsa_blind(rng, self.as_ref(), &m);
         Ok(BlindingResult {
-            blind_msg: BlindedMessage(to_bytes_be_padded(&blind_msg, modulus_bytes)),
+            blind_message: BlindMessage(to_bytes_be_padded(&blind_msg, modulus_bytes)),
             secret: Secret(to_bytes_be_padded(&secret, modulus_bytes)),
             msg_randomizer,
         })

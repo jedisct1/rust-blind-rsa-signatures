@@ -21,11 +21,11 @@ pub fn protocol(c: &mut Criterion) {
 
         group.bench_function(BenchmarkId::new("blind_sign", key_size), |b| {
             b.iter(|| {
-                _ = sk.blind_sign(&blinding_result.blind_msg).unwrap();
+                _ = sk.blind_sign(&blinding_result.blind_message).unwrap();
             })
         });
 
-        let blind_sig = sk.blind_sign(&blinding_result.blind_msg).unwrap();
+        let blind_sig = sk.blind_sign(&blinding_result.blind_message).unwrap();
 
         group.bench_function(BenchmarkId::new("finalize", key_size), |b| {
             b.iter(|| {

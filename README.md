@@ -43,7 +43,7 @@ let blinding_result = pk.blind(&mut DefaultRng, msg, &options)?;
 
 // [SERVER]: compute a signature for a blind message, to be sent to the client.
 // The client secret should not be sent to the server.
-let blind_sig = sk.blind_sign(&blinding_result.blind_msg)?;
+let blind_sig = sk.blind_sign(&blinding_result.blind_message)?;
 
 // [CLIENT]: later, when the client wants to redeem a signed blind message,
 // using the blinding secret, it can locally compute the signature of the

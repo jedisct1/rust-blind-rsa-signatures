@@ -130,10 +130,10 @@ fn rfc9474() {
         // Client blinds a message to be signed.
         let result = pk.blind(&mut mock_rng, &vector.msg, &options).unwrap();
         assert_eq!(result.secret.0, vector.inv.to_be_bytes().to_vec());
-        assert_eq!(result.blind_msg.0, vector.blinded_msg);
+        assert_eq!(result.blind_message.0, vector.blinded_msg);
 
         // Server signs a blinded message producing a blinded signature.
-        let blinded_sig = sk.blind_sign(&result.blind_msg).unwrap();
+        let blinded_sig = sk.blind_sign(&result.blind_message).unwrap();
         assert_eq!(blinded_sig.0, vector.blind_sig);
 
         // Client computes the final RSA signature.
