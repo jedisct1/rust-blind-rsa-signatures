@@ -1,6 +1,6 @@
 [package]
 name = "blind-rsa-signatures"
-version = "0.15.2"
+version = "0.16.0"
 authors = ["Frank Denis <github@pureftpd.org>"]
 edition = "2018"
 description = "RSA blind signatures in pure Rust"
