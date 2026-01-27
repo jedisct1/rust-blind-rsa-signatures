@@ -49,7 +49,7 @@ let blind_sig = sk.blind_sign(&blinding_result.blind_message)?;
 // using the blinding secret, it can locally compute the signature of the
 // original message.
 // The client then owns a new valid (message, signature) pair, and the
-// server cannot link it to a previous(blinded message, blind signature) pair.
+// server cannot link it to a previous (blinded message, blind signature) pair.
 // Note that the finalization function also verifies that the new signature
 // is correct for the server public key.
 let sig = pk.finalize(

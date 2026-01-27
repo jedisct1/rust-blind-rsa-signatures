@@ -1,6 +1,6 @@
 //! Author-blinded RSASSA-PSS RSAE signatures.
 //!
-//! This is an implementation of the [RSA Blind Signatures](https://cfrg.github.io/draft-irtf-cfrg-blind-signatures/draft-irtf-cfrg-rsa-blind-signatures.html) proposal, based on [the Zig implementation](https://github.com/jedisct1/zig-rsa-blind-signatures).
+//! This is an implementation of the [RSA Blind Signatures](https://www.rfc-editor.org/rfc/rfc9474.html) (RFC 9474), based on [the Zig implementation](https://github.com/jedisct1/zig-rsa-blind-signatures).
 //!
 //! ```rust
 //! use blind_rsa_signatures::{KeyPair, DefaultRng, Options};
