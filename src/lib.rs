@@ -338,6 +338,9 @@ impl KeyPair {
         rng: &mut R,
         modulus_bits: usize,
     ) -> Result<KeyPair, Error> {
+        if !(2048..=4096).contains(&modulus_bits) {
+            return Err(Error::UnsupportedParameters);
+        }
         let mut sk =
             RsaPrivateKey::new(rng, modulus_bits).map_err(|_| Error::UnsupportedParameters)?;
         sk.precompute().map_err(|_| Error::InternalError)?;
@@ -378,7 +381,7 @@ fn emsa_pss_encode(
     }
     let mut em = vec![0; em_len];
     let (db, h) = em.split_at_mut(em_len - h_len - 1);
-    let h = &mut h[..(em_len - 1) - db.len()];
+    let h = &mut h[..h_len];
     let prefix = [0u8; 8];
     hash.update(&prefix);
     hash.update(m_hash);
@@ -695,8 +698,7 @@ impl PublicKey {
                     .verify_prehash(&msg_hash, &sig_)
             }
         };
-        verified.map_err(|_| Error::VerificationFailed)?;
-        Ok(())
+        verified.map_err(|_| Error::VerificationFailed)
     }
 }
 
@@ -714,7 +716,9 @@ impl SecretKey {
             .map_err(|_| Error::EncodingError)?;
         sk.validate().map_err(|_| Error::InvalidKey)?;
         sk.precompute().map_err(|_| Error::InvalidKey)?;
-        Ok(SecretKey(sk))
+        let sk = SecretKey(sk);
+        sk.public_key()?;
+        Ok(sk)
     }
 
     pub fn to_pem(&self) -> Result<String, Error> {
@@ -730,11 +734,15 @@ impl SecretKey {
             .map_err(|_| Error::EncodingError)?;
         sk.validate().map_err(|_| Error::InvalidKey)?;
         sk.precompute().map_err(|_| Error::InvalidKey)?;
-        Ok(SecretKey(sk))
+        let sk = SecretKey(sk);
+        sk.public_key()?;
+        Ok(sk)
     }
 
     pub fn public_key(&self) -> Result<PublicKey, Error> {
-        Ok(PublicKey(RsaPublicKey::from(self.as_ref())))
+        let pk = PublicKey(RsaPublicKey::from(self.as_ref()));
+        pk.check_rsa_parameters()?;
+        Ok(pk)
     }
 
     /// Sign a blinded message
