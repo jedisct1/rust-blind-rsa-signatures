@@ -161,11 +161,11 @@ pub enum PrepareMode {
 #[derive(Clone, Debug, Eq, PartialEq, AsRef, From, Into, new)]
 pub struct Options {
     /// Hash function to use for padding and for hashing the message
-    hash: Hash,
+    pub hash: Hash,
     /// Either `PSSMode::PSS` to use salt, or `PSSMode::PSSZero` for empty salt
-    pss_mode: PSSMode,
+    pub pss_mode: PSSMode,
     /// Use deterministic or randomized message padding
-    prepare: PrepareMode,
+    pub prepare: PrepareMode,
 }
 
 impl Default for Options {
