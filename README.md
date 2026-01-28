@@ -29,17 +29,16 @@ The scheme was designed by David Chaum, and was originally implemented for anony
 ## Usage
 
 ```rust
-use blind_rsa_signatures::{KeyPair, DefaultRng, Hash, Options, PSSMode, PrepareMode};
-let options = Options::new(Hash::Sha384, PSSMode::PSS, PrepareMode::Randomized);
+use blind_rsa_signatures::{KeyPair, Sha384, PSS, Randomized, DefaultRng};
 
 // [SERVER]: Generate a RSA-2048 key pair
-let kp = KeyPair::generate(&mut DefaultRng, 2048)?;
+let kp = KeyPair::<Sha384, PSS, Randomized>::generate(&mut DefaultRng, 2048)?;
 let (pk, sk) = (kp.pk, kp.sk);
 
 // [CLIENT]: create a random message and blind it for the server whose public key is `pk`.
 // The client must store the message and the secret.
 let msg = b"test";
-let blinding_result = pk.blind(&mut DefaultRng, msg, &options)?;
+let blinding_result = pk.blind(&mut DefaultRng, msg)?;
 
 // [SERVER]: compute a signature for a blind message, to be sent to the client.
 // The client secret should not be sent to the server.
@@ -52,22 +51,35 @@ let blind_sig = sk.blind_sign(&blinding_result.blind_message)?;
 // server cannot link it to a previous (blinded message, blind signature) pair.
 // Note that the finalization function also verifies that the new signature
 // is correct for the server public key.
-let sig = pk.finalize(
-    &blind_sig,
-    &blinding_result,
-    &msg,
-    &options,
-)?;
+let sig = pk.finalize(&blind_sig, &blinding_result, msg)?;
 
 // [SERVER]: a non-blind signature can be verified using the server's public key.
-sig.verify(&pk, blinding_result.msg_randomizer, msg, &options)?;
+pk.verify(&sig, blinding_result.msg_randomizer, msg)?;
+```
+
+## Configuration options
+
+The key types take three compile-time parameters:
+
+- Hash algorithm: `Sha256`, `Sha384`, `Sha512`
+- Salt mode: `PSS` (with salt), `PSSZero` (without salt)
+- Message preparation: `Randomized`, `Deterministic`
+
+For convenience, you can define a type alias:
+
+```rust
+use blind_rsa_signatures::{KeyPair, PublicKey, SecretKey, Sha384, PSS, Randomized};
+
+type MyKeyPair = KeyPair<Sha384, PSS, Randomized>;
+type MyPublicKey = PublicKey<Sha384, PSS, Randomized>;
+type MySecretKey = SecretKey<Sha384, PSS, Randomized>;
 ```
 
 This crate also includes utility functions to import and export keys.
 
 ## For other languages
 
-* [Zig](https://github.com/jedisct1/zig-blind-rsa-signatures)
+* [Zig](https://github.com/jedisct1/zig-rsa-blind-signatures)
 * [C](https://github.com/jedisct1/blind-rsa-signatures)
 * [Go](https://pkg.go.dev/github.com/cloudflare/circl/blindsign/blindrsa)
 * [TypeScript](https://github.com/cloudflare/blindrsa-ts)
