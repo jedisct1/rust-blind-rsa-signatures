@@ -3,9 +3,9 @@
 //! This is an implementation of the [RSA Blind Signatures](https://www.rfc-editor.org/rfc/rfc9474.html) (RFC 9474), based on [the Zig implementation](https://github.com/jedisct1/zig-rsa-blind-signatures).
 //!
 //! ```rust
-//! use blind_rsa_signatures::{KeyPair, DefaultRng, Options};
+//! use blind_rsa_signatures::{KeyPair, DefaultRng, Hash, Options, PSSMode, PrepareMode};
 //!
-//! let options = Options::default();
+//! let options = Options::new(Hash::Sha384, PSSMode::PSS, PrepareMode::Randomized);
 //!
 //! // [SERVER]: Generate a RSA-2048 key pair
 //! let kp = KeyPair::generate(&mut DefaultRng, 2048)?;
@@ -161,21 +161,11 @@ pub enum PrepareMode {
 #[derive(Clone, Debug, Eq, PartialEq, AsRef, From, Into, new)]
 pub struct Options {
     /// Hash function to use for padding and for hashing the message
-    hash: Hash,
+    pub hash: Hash,
     /// Either `PSSMode::PSS` to use salt, or `PSSMode::PSSZero` for empty salt
-    pss_mode: PSSMode,
+    pub pss_mode: PSSMode,
     /// Use deterministic or randomized message padding
-    prepare: PrepareMode,
-}
-
-impl Default for Options {
-    fn default() -> Self {
-        Self {
-            hash: Hash::Sha384,
-            pss_mode: PSSMode::PSS,
-            prepare: PrepareMode::Randomized,
-        }
-    }
+    pub prepare: PrepareMode,
 }
 
 impl Options {
@@ -537,10 +527,8 @@ impl PublicKey {
         TPL
     }
 
-    pub fn to_spki(&self, options: Option<&Options>) -> Result<Vec<u8>, Error> {
+    pub fn to_spki(&self, options: &Options) -> Result<Vec<u8>, Error> {
         let tpl = Self::spki_tpl();
-        let default_options = Options::default();
-        let options = options.unwrap_or(&default_options);
         let der = self.to_der()?;
         if der.len() <= 24 {
             return Err(Error::EncodingError);

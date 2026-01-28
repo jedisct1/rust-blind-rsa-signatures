@@ -29,8 +29,8 @@ The scheme was designed by David Chaum, and was originally implemented for anony
 ## Usage
 
 ```rust
-use blind_rsa_signatures::{KeyPair, DefaultRng, Options};
-let options = Options::default();
+use blind_rsa_signatures::{KeyPair, DefaultRng, Hash, Options, PSSMode, PrepareMode};
+let options = Options::new(Hash::Sha384, PSSMode::PSS, PrepareMode::Randomized);
 
 // [SERVER]: Generate a RSA-2048 key pair
 let kp = KeyPair::generate(&mut DefaultRng, 2048)?;

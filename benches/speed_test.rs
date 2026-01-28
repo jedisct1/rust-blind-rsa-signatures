@@ -1,10 +1,10 @@
-use blind_rsa_signatures::{DefaultRng, KeyPair, Options};
+use blind_rsa_signatures::{DefaultRng, Hash, KeyPair, Options, PSSMode, PrepareMode};
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 
 pub fn protocol(c: &mut Criterion) {
     let mut group = c.benchmark_group("protocol");
     let msg = b"test";
-    let options = Options::default();
+    let options = Options::new(Hash::Sha384, PSSMode::PSS, PrepareMode::Randomized);
 
     let key_sizes = [2048, 4096];
     for key_size in key_sizes {
