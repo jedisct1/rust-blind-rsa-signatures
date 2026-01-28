@@ -65,17 +65,40 @@ The key types take three compile-time parameters:
 - Salt mode: `PSS` (with salt), `PSSZero` (without salt)
 - Message preparation: `Randomized`, `Deterministic`
 
-For convenience, you can define a type alias:
+Pre-defined type aliases are available for all SHA-384 configurations:
+
+| Variant                        | KeyPair                             | PublicKey                             | SecretKey                             |
+| ------------------------------ | ----------------------------------- | ------------------------------------- | ------------------------------------- |
+| PSS + Randomized (recommended) | `KeyPairSha384PSSRandomized`        | `PublicKeySha384PSSRandomized`        | `SecretKeySha384PSSRandomized`        |
+| PSSZero + Randomized           | `KeyPairSha384PSSZeroRandomized`    | `PublicKeySha384PSSZeroRandomized`    | `SecretKeySha384PSSZeroRandomized`    |
+| PSS + Deterministic            | `KeyPairSha384PSSDeterministic`     | `PublicKeySha384PSSDeterministic`     | `SecretKeySha384PSSDeterministic`     |
+| PSSZero + Deterministic        | `KeyPairSha384PSSZeroDeterministic` | `PublicKeySha384PSSZeroDeterministic` | `SecretKeySha384PSSZeroDeterministic` |
+
+For SHA-256 or SHA-512, use the generic types directly:
 
 ```rust
-use blind_rsa_signatures::{KeyPair, PublicKey, SecretKey, Sha384, PSS, Randomized};
+use blind_rsa_signatures::{KeyPair, Sha512, PSS, Randomized, DefaultRng};
 
-type MyKeyPair = KeyPair<Sha384, PSS, Randomized>;
-type MyPublicKey = PublicKey<Sha384, PSS, Randomized>;
-type MySecretKey = SecretKey<Sha384, PSS, Randomized>;
+let kp = KeyPair::<Sha512, PSS, Randomized>::generate(&mut DefaultRng, 2048)?;
 ```
 
-This crate also includes utility functions to import and export keys.
+## Key import/export
+
+Keys can be imported and exported in DER, PEM, and SPKI formats:
+
+```rust
+use blind_rsa_signatures::PublicKeySha384PSSRandomized;
+
+// Export
+let der = pk.to_der()?;
+let pem = pk.to_pem()?;
+let spki = pk.to_spki()?;
+
+// Import
+let pk = PublicKeySha384PSSRandomized::from_der(&der)?;
+let pk = PublicKeySha384PSSRandomized::from_pem(&pem)?;
+let pk = PublicKeySha384PSSRandomized::from_spki(&spki)?;
+```
 
 ## For other languages
 

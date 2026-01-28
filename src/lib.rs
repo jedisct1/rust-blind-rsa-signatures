@@ -890,3 +890,39 @@ pub type BlindRsaSha384PSSDeterministic = BlindRsa<Sha384, PSS, Deterministic>;
 
 /// RSABSSA-SHA384-PSSZERO-Deterministic
 pub type BlindRsaSha384PSSZeroDeterministic = BlindRsa<Sha384, PSSZero, Deterministic>;
+
+/// Public key for RSABSSA-SHA384-PSS-Randomized (RFC 9474 recommended)
+pub type PublicKeySha384PSSRandomized = PublicKey<Sha384, PSS, Randomized>;
+
+/// Secret key for RSABSSA-SHA384-PSS-Randomized (RFC 9474 recommended)
+pub type SecretKeySha384PSSRandomized = SecretKey<Sha384, PSS, Randomized>;
+
+/// Key pair for RSABSSA-SHA384-PSS-Randomized (RFC 9474 recommended)
+pub type KeyPairSha384PSSRandomized = KeyPair<Sha384, PSS, Randomized>;
+
+/// Public key for RSABSSA-SHA384-PSSZERO-Randomized
+pub type PublicKeySha384PSSZeroRandomized = PublicKey<Sha384, PSSZero, Randomized>;
+
+/// Secret key for RSABSSA-SHA384-PSSZERO-Randomized
+pub type SecretKeySha384PSSZeroRandomized = SecretKey<Sha384, PSSZero, Randomized>;
+
+/// Key pair for RSABSSA-SHA384-PSSZERO-Randomized
+pub type KeyPairSha384PSSZeroRandomized = KeyPair<Sha384, PSSZero, Randomized>;
+
+/// Public key for RSABSSA-SHA384-PSS-Deterministic
+pub type PublicKeySha384PSSDeterministic = PublicKey<Sha384, PSS, Deterministic>;
+
+/// Secret key for RSABSSA-SHA384-PSS-Deterministic
+pub type SecretKeySha384PSSDeterministic = SecretKey<Sha384, PSS, Deterministic>;
+
+/// Key pair for RSABSSA-SHA384-PSS-Deterministic
+pub type KeyPairSha384PSSDeterministic = KeyPair<Sha384, PSS, Deterministic>;
+
+/// Public key for RSABSSA-SHA384-PSSZERO-Deterministic
+pub type PublicKeySha384PSSZeroDeterministic = PublicKey<Sha384, PSSZero, Deterministic>;
+
+/// Secret key for RSABSSA-SHA384-PSSZERO-Deterministic
+pub type SecretKeySha384PSSZeroDeterministic = SecretKey<Sha384, PSSZero, Deterministic>;
+
+/// Key pair for RSABSSA-SHA384-PSSZERO-Deterministic
+pub type KeyPairSha384PSSZeroDeterministic = KeyPair<Sha384, PSSZero, Deterministic>;
