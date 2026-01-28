@@ -60,6 +60,10 @@ use rsa::{RsaPrivateKey, RsaPublicKey};
 mod blind_rsa;
 mod mgf1;
 
+mod private {
+    pub trait Sealed {}
+}
+
 use blind_rsa::{blind as rsa_blind, unblind as rsa_unblind};
 use mgf1::mgf1_xor;
 
@@ -224,7 +228,8 @@ impl HashAlgorithm for Sha512 {
 }
 
 /// Trait for PSS salt mode (compile-time parameter)
-pub trait SaltMode: Clone + Default {
+/// The only valid implementations are [`PSS`] and [`PSSZero`].
+pub trait SaltMode: Clone + Default + private::Sealed {
     /// Whether salt is used
     const USE_SALT: bool;
 
@@ -242,6 +247,8 @@ pub trait SaltMode: Clone + Default {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PSS;
 
+impl private::Sealed for PSS {}
+
 impl SaltMode for PSS {
     const USE_SALT: bool = true;
 }
@@ -250,12 +257,15 @@ impl SaltMode for PSS {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PSSZero;
 
+impl private::Sealed for PSSZero {}
+
 impl SaltMode for PSSZero {
     const USE_SALT: bool = false;
 }
 
 /// Trait for message preparation mode (compile-time parameter)
-pub trait MessagePrepare: Clone + Default {
+/// The only valid implementations are [`Randomized`] and [`Deterministic`].
+pub trait MessagePrepare: Clone + Default + private::Sealed {
     /// Whether to randomize the message with a 32-byte prefix
     const RANDOMIZE: bool;
 }
@@ -264,6 +274,8 @@ pub trait MessagePrepare: Clone + Default {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Randomized;
 
+impl private::Sealed for Randomized {}
+
 impl MessagePrepare for Randomized {
     const RANDOMIZE: bool = true;
 }
@@ -271,6 +283,8 @@ impl MessagePrepare for Randomized {
 /// Deterministic message preparation
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Deterministic;
+
+impl private::Sealed for Deterministic {}
 
 impl MessagePrepare for Deterministic {
     const RANDOMIZE: bool = false;
@@ -549,7 +563,7 @@ pub type BlindRsaKeyPair<H, S, M> = KeyPair<H, S, M>;
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PublicKey<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> {
-    pub inner: RsaPublicKey,
+    inner: RsaPublicKey,
     _phantom: PhantomData<(H, S, M)>,
 }
 
@@ -748,7 +762,7 @@ impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> AsRef<RsaPublicKey> for P
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
 pub struct SecretKey<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> {
-    pub inner: RsaPrivateKey,
+    inner: RsaPrivateKey,
     _phantom: PhantomData<(H, S, M)>,
 }
 
