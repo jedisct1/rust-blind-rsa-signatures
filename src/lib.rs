@@ -54,7 +54,7 @@ use rsa::pkcs8::{
 };
 use rsa::rand_core::{CryptoRng, TryCryptoRng, TryRng};
 use rsa::signature::hazmat::PrehashVerifier;
-use rsa::traits::PublicKeyParts as _;
+use rsa::traits::{PrivateKeyParts, PublicKeyParts};
 use rsa::{RsaPrivateKey, RsaPublicKey};
 
 mod blind_rsa;
@@ -156,7 +156,7 @@ pub trait HashAlgorithm: Clone + Default {
 }
 
 /// SHA-256 hash algorithm
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Sha256;
 
 impl HashAlgorithm for Sha256 {
@@ -180,7 +180,7 @@ impl HashAlgorithm for Sha256 {
 }
 
 /// SHA-384 hash algorithm
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Sha384;
 
 impl HashAlgorithm for Sha384 {
@@ -204,7 +204,7 @@ impl HashAlgorithm for Sha384 {
 }
 
 /// SHA-512 hash algorithm
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Sha512;
 
 impl HashAlgorithm for Sha512 {
@@ -244,7 +244,7 @@ pub trait SaltMode: Clone + Default + private::Sealed {
 }
 
 /// PSS mode with salt (salt length = hash output length)
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PSS;
 
 impl private::Sealed for PSS {}
@@ -254,7 +254,7 @@ impl SaltMode for PSS {
 }
 
 /// PSS mode without salt (salt length = 0)
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PSSZero;
 
 impl private::Sealed for PSSZero {}
@@ -271,7 +271,7 @@ pub trait MessagePrepare: Clone + Default + private::Sealed {
 }
 
 /// Randomized message preparation
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Randomized;
 
 impl private::Sealed for Randomized {}
@@ -281,7 +281,7 @@ impl MessagePrepare for Randomized {
 }
 
 /// Deterministic message preparation
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Deterministic;
 
 impl private::Sealed for Deterministic {}
@@ -567,6 +567,20 @@ pub struct PublicKey<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> {
     _phantom: PhantomData<(H, S, M)>,
 }
 
+impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> PublicKeyParts for PublicKey<H, S, M> {
+    fn n(&self) -> &crypto_bigint::NonZero<BoxedUint> {
+        self.inner.n()
+    }
+
+    fn e(&self) -> &BoxedUint {
+        self.inner.e()
+    }
+
+    fn n_params(&self) -> &crypto_bigint::modular::BoxedMontyParams {
+        self.inner.n_params()
+    }
+}
+
 impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> PublicKey<H, S, M> {
     pub fn new(inner: RsaPublicKey) -> Self {
         Self {
@@ -764,6 +778,52 @@ impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> AsRef<RsaPublicKey> for P
 pub struct SecretKey<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> {
     inner: RsaPrivateKey,
     _phantom: PhantomData<(H, S, M)>,
+}
+
+impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> PublicKeyParts for SecretKey<H, S, M> {
+    fn n(&self) -> &crypto_bigint::NonZero<BoxedUint> {
+        self.inner.n()
+    }
+    fn e(&self) -> &BoxedUint {
+        self.inner.e()
+    }
+    fn n_params(&self) -> &crypto_bigint::modular::BoxedMontyParams {
+        self.inner.n_params()
+    }
+}
+
+impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> PrivateKeyParts for SecretKey<H, S, M> {
+    fn d(&self) -> &BoxedUint {
+        self.inner.d()
+    }
+
+    fn primes(&self) -> &[BoxedUint] {
+        self.inner.primes()
+    }
+
+    fn dp(&self) -> Option<&BoxedUint> {
+        self.inner.dp()
+    }
+
+    fn dq(&self) -> Option<&BoxedUint> {
+        self.inner.dq()
+    }
+
+    fn qinv(&self) -> Option<&crypto_bigint::modular::BoxedMontyForm> {
+        self.inner.qinv()
+    }
+
+    fn crt_values(&self) -> Option<&[rsa::CrtValue]> {
+        self.inner.crt_values()
+    }
+
+    fn p_params(&self) -> Option<&crypto_bigint::modular::BoxedMontyParams> {
+        self.inner.p_params()
+    }
+
+    fn q_params(&self) -> Option<&crypto_bigint::modular::BoxedMontyParams> {
+        self.inner.q_params()
+    }
 }
 
 impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> SecretKey<H, S, M> {
