@@ -18,6 +18,7 @@ crypto-bigint = "0.7.0-rc.22"
 digest = "0.11.0-rc.9"
 hmac-sha256 = { version = "1.1.13", features = ["traits011"] }
 hmac-sha512 = { version = "1.1.8", features = ["traits011", "sha384"] }
+ct-codecs = "1"
 derive-new = "0.7.0"
 derive_more = { version = "2.1.1", features = ["full"] }
 serde = { version = "1", features = ["derive"], optional = true }

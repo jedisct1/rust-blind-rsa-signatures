@@ -156,7 +156,7 @@ pub trait HashAlgorithm: Clone + Default {
 }
 
 /// SHA-256 hash algorithm
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Sha256;
 
 impl HashAlgorithm for Sha256 {
@@ -180,7 +180,7 @@ impl HashAlgorithm for Sha256 {
 }
 
 /// SHA-384 hash algorithm
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Sha384;
 
 impl HashAlgorithm for Sha384 {
@@ -204,7 +204,7 @@ impl HashAlgorithm for Sha384 {
 }
 
 /// SHA-512 hash algorithm
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Sha512;
 
 impl HashAlgorithm for Sha512 {
@@ -244,7 +244,7 @@ pub trait SaltMode: Clone + Default + private::Sealed {
 }
 
 /// PSS mode with salt (salt length = hash output length)
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct PSS;
 
 impl private::Sealed for PSS {}
@@ -254,7 +254,7 @@ impl SaltMode for PSS {
 }
 
 /// PSS mode without salt (salt length = 0)
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct PSSZero;
 
 impl private::Sealed for PSSZero {}
@@ -271,7 +271,7 @@ pub trait MessagePrepare: Clone + Default + private::Sealed {
 }
 
 /// Randomized message preparation
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Randomized;
 
 impl private::Sealed for Randomized {}
@@ -281,7 +281,7 @@ impl MessagePrepare for Randomized {
 }
 
 /// Deterministic message preparation
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Deterministic;
 
 impl private::Sealed for Deterministic {}
@@ -317,24 +317,32 @@ impl TryCryptoRng for DefaultRng {}
 #[derive(Clone, Debug, AsRef, Deref, From, Into, new)]
 pub struct Secret(pub Vec<u8>);
 
+impl Eq for Secret {}
+
+impl PartialEq for Secret {
+    fn eq(&self, other: &Self) -> bool {
+        ct_codecs::verify(&self.0, &other.0)
+    }
+}
+
 /// A blind message
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[derive(Clone, Debug, AsRef, Deref, From, Into, new)]
+#[derive(Clone, Debug, Eq, PartialEq, AsRef, Deref, From, Into, new)]
 pub struct BlindMessage(pub Vec<u8>);
 
 /// A blind signature
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[derive(Clone, Debug, AsRef, Deref, From, Into, new)]
+#[derive(Clone, Debug, Eq, PartialEq, AsRef, Deref, From, Into, new)]
 pub struct BlindSignature(pub Vec<u8>);
 
 /// A (non-blind) signature
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[derive(Clone, Debug, AsRef, Deref, From, Into, new)]
+#[derive(Clone, Debug, Eq, PartialEq, AsRef, Deref, From, Into, new)]
 pub struct Signature(pub Vec<u8>);
 
 /// A message randomizer (noise added as a prefix to the message)
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[derive(Clone, Copy, Debug, AsRef, Deref, From, Into, new)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, AsRef, Deref, From, Into, new)]
 pub struct MessageRandomizer(pub [u8; 32]);
 
 /// Result of a blinding operation
@@ -343,6 +351,16 @@ pub struct BlindingResult {
     pub blind_message: BlindMessage,
     pub secret: Secret,
     pub msg_randomizer: Option<MessageRandomizer>,
+}
+
+impl Eq for BlindingResult {}
+
+impl PartialEq for BlindingResult {
+    fn eq(&self, other: &Self) -> bool {
+        self.blind_message == other.blind_message
+            && self.secret == other.secret
+            && self.msg_randomizer == other.msg_randomizer
+    }
 }
 
 impl AsRef<[u8]> for Secret {
@@ -529,7 +547,7 @@ fn emsa_pss_encode(
 ///
 /// type BRsa = BlindRsa<Sha384, PSS, Randomized>;
 /// ```
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct BlindRsa<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> {
     _phantom: PhantomData<(H, S, M)>,
 }
@@ -854,8 +872,18 @@ impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> AsRef<RsaPrivateKey> for 
     }
 }
 
+impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> Eq for SecretKey<H, S, M> {}
+
+impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> PartialEq for SecretKey<H, S, M> {
+    fn eq(&self, other: &Self) -> bool {
+        // RsaPrivateKey currently uses BoxedUint internally, which implements
+        // constant-time comparison when the moduli are the same.
+        self.inner == other.inner
+    }
+}
+
 /// An RSA key pair
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct KeyPair<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> {
     pub pk: PublicKey<H, S, M>,
     pub sk: SecretKey<H, S, M>,
