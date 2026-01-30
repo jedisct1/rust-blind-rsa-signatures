@@ -144,3 +144,46 @@ fn rfc9474() {
         }
     }
 }
+
+#[test]
+fn key_component_accessors() {
+    use blind_rsa_signatures::{DefaultRng, KeyPair};
+
+    let kp = KeyPair::<Sha384, PSS, Randomized>::generate(&mut DefaultRng, 2048).unwrap();
+
+    // Test public key component accessors
+    let pk_components = kp.pk.components();
+    let n = pk_components.n();
+    let e = pk_components.e();
+
+    // n should be 256 bytes for 2048-bit key
+    assert_eq!(n.len(), 256);
+    // e is typically 65537 (0x010001)
+    assert!(!e.is_empty());
+
+    // Test secret key component accessors
+    let sk_components = kp.sk.components();
+    let sk_n = sk_components.n();
+    let sk_e = sk_components.e();
+    let d = sk_components.d();
+    let primes = sk_components.primes();
+
+    // n and e should match between pk and sk
+    assert_eq!(n, sk_n);
+    assert_eq!(e, sk_e);
+
+    // d should be present
+    assert!(!d.is_empty());
+
+    // Should have 2 primes (p and q)
+    assert_eq!(primes.len(), 2);
+    for p in &primes {
+        // Each prime should be present
+        assert!(!p.is_empty());
+    }
+
+    // CRT parameters should be present after precompute
+    assert!(sk_components.dmp1().is_some());
+    assert!(sk_components.dmq1().is_some());
+    assert!(sk_components.iqmp().is_some());
+}

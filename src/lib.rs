@@ -585,12 +585,36 @@ pub struct PublicKey<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> {
     _phantom: PhantomData<(H, S, M)>,
 }
 
+/// Provides access to the raw RSA public key components.
+pub struct PublicKeyComponents<'a> {
+    inner: &'a RsaPublicKey,
+}
+
+impl PublicKeyComponents<'_> {
+    /// Returns the modulus (n) as big-endian bytes.
+    pub fn n(&self) -> Vec<u8> {
+        use rsa::traits::PublicKeyParts;
+        self.inner.n().as_ref().to_be_bytes().into_vec()
+    }
+
+    /// Returns the public exponent (e) as big-endian bytes.
+    pub fn e(&self) -> Vec<u8> {
+        use rsa::traits::PublicKeyParts;
+        self.inner.e().to_be_bytes().into_vec()
+    }
+}
+
 impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> PublicKey<H, S, M> {
     pub fn new(inner: RsaPublicKey) -> Self {
         Self {
             inner,
             _phantom: PhantomData,
         }
+    }
+
+    /// Returns an accessor for the raw RSA key components.
+    pub fn components(&self) -> PublicKeyComponents<'_> {
+        PublicKeyComponents { inner: &self.inner }
     }
 
     fn salt_len() -> usize {
@@ -784,12 +808,70 @@ pub struct SecretKey<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> {
     _phantom: PhantomData<(H, S, M)>,
 }
 
+/// Provides access to the raw RSA secret key components.
+pub struct SecretKeyComponents<'a> {
+    inner: &'a RsaPrivateKey,
+}
+
+impl SecretKeyComponents<'_> {
+    /// Returns the modulus (n) as big-endian bytes.
+    pub fn n(&self) -> Vec<u8> {
+        use rsa::traits::PublicKeyParts;
+        self.inner.n().as_ref().to_be_bytes().into_vec()
+    }
+
+    /// Returns the public exponent (e) as big-endian bytes.
+    pub fn e(&self) -> Vec<u8> {
+        use rsa::traits::PublicKeyParts;
+        self.inner.e().to_be_bytes().into_vec()
+    }
+
+    /// Returns the private exponent (d) as big-endian bytes.
+    pub fn d(&self) -> Vec<u8> {
+        use rsa::traits::PrivateKeyParts;
+        self.inner.d().to_be_bytes().into_vec()
+    }
+
+    /// Returns the prime factors (p, q, ...) as big-endian bytes.
+    pub fn primes(&self) -> Vec<Vec<u8>> {
+        use rsa::traits::PrivateKeyParts;
+        self.inner
+            .primes()
+            .iter()
+            .map(|p| p.to_be_bytes().into_vec())
+            .collect()
+    }
+
+    /// Returns d mod (p-1) as big-endian bytes, if precomputed.
+    pub fn dmp1(&self) -> Option<Vec<u8>> {
+        use rsa::traits::PrivateKeyParts;
+        self.inner.dp().map(|v| v.to_be_bytes().into_vec())
+    }
+
+    /// Returns d mod (q-1) as big-endian bytes, if precomputed.
+    pub fn dmq1(&self) -> Option<Vec<u8>> {
+        use rsa::traits::PrivateKeyParts;
+        self.inner.dq().map(|v| v.to_be_bytes().into_vec())
+    }
+
+    /// Returns q^(-1) mod p as big-endian bytes, if precomputed.
+    pub fn iqmp(&self) -> Option<Vec<u8>> {
+        use rsa::traits::PrivateKeyParts;
+        self.inner.qinv().map(|v| v.retrieve().to_be_bytes().into_vec())
+    }
+}
+
 impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> SecretKey<H, S, M> {
     pub fn new(inner: RsaPrivateKey) -> Self {
         Self {
             inner,
             _phantom: PhantomData,
         }
+    }
+
+    /// Returns an accessor for the raw RSA key components.
+    pub fn components(&self) -> SecretKeyComponents<'_> {
+        SecretKeyComponents { inner: &self.inner }
     }
 
     pub fn to_der(&self) -> Result<Vec<u8>, Error> {
