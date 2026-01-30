@@ -54,7 +54,7 @@ use rsa::pkcs8::{
 };
 use rsa::rand_core::{CryptoRng, TryCryptoRng, TryRng};
 use rsa::signature::hazmat::PrehashVerifier;
-use rsa::traits::PublicKeyParts as _;
+use rsa::traits::{PrivateKeyParts, PublicKeyParts};
 use rsa::{RsaPrivateKey, RsaPublicKey};
 
 mod blind_rsa;
@@ -567,6 +567,20 @@ pub struct PublicKey<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> {
     _phantom: PhantomData<(H, S, M)>,
 }
 
+impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> PublicKeyParts for PublicKey<H, S, M> {
+    fn n(&self) -> &crypto_bigint::NonZero<BoxedUint> {
+        self.inner.n()
+    }
+
+    fn e(&self) -> &BoxedUint {
+        self.inner.e()
+    }
+
+    fn n_params(&self) -> &crypto_bigint::modular::BoxedMontyParams {
+        self.inner.n_params()
+    }
+}
+
 impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> PublicKey<H, S, M> {
     pub fn new(inner: RsaPublicKey) -> Self {
         Self {
@@ -764,6 +778,52 @@ impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> AsRef<RsaPublicKey> for P
 pub struct SecretKey<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> {
     inner: RsaPrivateKey,
     _phantom: PhantomData<(H, S, M)>,
+}
+
+impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> PublicKeyParts for SecretKey<H, S, M> {
+    fn n(&self) -> &crypto_bigint::NonZero<BoxedUint> {
+        self.inner.n()
+    }
+    fn e(&self) -> &BoxedUint {
+        self.inner.e()
+    }
+    fn n_params(&self) -> &crypto_bigint::modular::BoxedMontyParams {
+        self.inner.n_params()
+    }
+}
+
+impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> PrivateKeyParts for SecretKey<H, S, M> {
+    fn d(&self) -> &BoxedUint {
+        self.inner.d()
+    }
+
+    fn primes(&self) -> &[BoxedUint] {
+        self.inner.primes()
+    }
+
+    fn dp(&self) -> Option<&BoxedUint> {
+        self.inner.dp()
+    }
+
+    fn dq(&self) -> Option<&BoxedUint> {
+        self.inner.dq()
+    }
+
+    fn qinv(&self) -> Option<&crypto_bigint::modular::BoxedMontyForm> {
+        self.inner.qinv()
+    }
+
+    fn crt_values(&self) -> Option<&[rsa::CrtValue]> {
+        self.inner.crt_values()
+    }
+
+    fn p_params(&self) -> Option<&crypto_bigint::modular::BoxedMontyParams> {
+        self.inner.p_params()
+    }
+
+    fn q_params(&self) -> Option<&crypto_bigint::modular::BoxedMontyParams> {
+        self.inner.q_params()
+    }
 }
 
 impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> SecretKey<H, S, M> {
