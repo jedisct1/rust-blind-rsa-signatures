@@ -102,7 +102,7 @@ let pk = PublicKeySha384PSSRandomized::from_spki(&spki)?;
 
 ## For other languages
 
-* [Zig](https://github.com/jedisct1/zig-rsa-blind-signatures)
-* [C](https://github.com/jedisct1/blind-rsa-signatures)
+* [Zig](https://github.com/jedisct1/zig-blind-rsa-signatures)
+* [C](https://github.com/jedisct1/c-blind-rsa-signatures)
 * [Go](https://pkg.go.dev/github.com/cloudflare/circl/blindsign/blindrsa)
 * [TypeScript](https://github.com/cloudflare/blindrsa-ts)
