@@ -22,4 +22,4 @@ jobs:
           rustup target add wasm32-wasip1
           cargo build --verbose --target=wasm32-wasip1
       - name: Run tests
-        run: cargo test --verbose
+        run: cargo test --verbose --release
