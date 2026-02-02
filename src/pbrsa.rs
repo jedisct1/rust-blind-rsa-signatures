@@ -39,7 +39,7 @@ use std::convert::TryFrom;
 use std::marker::PhantomData;
 
 use crypto_bigint::modular::{BoxedMontyForm, BoxedMontyParams};
-use crypto_bigint::{BoxedUint, Gcd, Integer, NonZero, Odd, RandomMod, Resize};
+use crypto_bigint::{BoxedUint, Gcd, Integer, NonZero, Odd, Resize};
 use digest::DynDigest;
 use rsa::hazmat::rsa_decrypt_and_check;
 use rsa::pkcs1::{DecodeRsaPrivateKey as _, DecodeRsaPublicKey as _};
@@ -94,14 +94,8 @@ fn passes_trial_division(n: &BoxedUint) -> bool {
 }
 
 /// Check if a number is a Miller-Rabin probable prime
-const MR_SMALL_BASES: [u32; 16] = [
-    2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53,
-];
-
-fn is_probable_prime_inner<F>(n: &BoxedUint, iterations: usize, mut random_base: F) -> bool
-where
-    F: FnMut() -> Option<BoxedUint>,
-{
+fn is_probable_prime(n: &BoxedUint, iterations: usize) -> bool {
+    use crypto_bigint::modular::BoxedMontyForm;
 
     let n_bits = n.bits_precision();
     let one = BoxedUint::one_with_precision(n_bits);
@@ -133,10 +127,13 @@ where
     };
     let params = crypto_bigint::modular::BoxedMontyParams::new(n_odd);
 
-    let mut rounds_done = 0usize;
-    let check_base = |a: BoxedUint| -> bool {
+    // Miller-Rabin test with fixed small bases first (deterministic for small numbers)
+    let small_bases: [u32; 7] = [2, 3, 5, 7, 11, 13, 17];
+
+    for &base in &small_bases[..iterations.min(small_bases.len())] {
+        let a = Resize::resize(BoxedUint::from(base), n_bits);
         if a >= *n {
-            return true;
+            continue;
         }
 
         let a_monty = BoxedMontyForm::new(a, &params);
@@ -144,7 +141,7 @@ where
         let mut x_val = x.retrieve();
 
         if x_val == one || x_val == n_minus_1 {
-            return true;
+            continue;
         }
 
         let mut composite = true;
@@ -163,66 +160,16 @@ where
         if composite {
             return false;
         }
-
-        true
-    };
-
-    for &base in &MR_SMALL_BASES[..iterations.min(MR_SMALL_BASES.len())] {
-        let a = Resize::resize(BoxedUint::from(base), n_bits);
-        if !check_base(a) {
-            return false;
-        }
-        rounds_done += 1;
-    }
-
-    while rounds_done < iterations {
-        let mut a = match random_base() {
-            Some(a) => a,
-            None => break,
-        };
-
-        if a <= one {
-            a = two.clone();
-        }
-        if a.bits_precision() != n_bits {
-            a = Resize::resize(a, n_bits);
-        }
-        if a >= *n {
-            continue;
-        }
-
-        if !check_base(a) {
-            return false;
-        }
-        rounds_done += 1;
     }
 
     true
-}
-
-fn is_probable_prime(n: &BoxedUint, iterations: usize) -> bool {
-    is_probable_prime_inner(n, iterations, || None)
-}
-
-fn is_probable_prime_with_rng<R: CryptoRng + ?Sized>(
-    n: &BoxedUint,
-    iterations: usize,
-    rng: &mut R,
-) -> bool {
-    let n_nz = match NonZero::new(n.clone()).into_option() {
-        Some(nz) => nz,
-        None => return false,
-    };
-    is_probable_prime_inner(n, iterations, || {
-        Some(BoxedUint::random_mod_vartime(rng, &n_nz))
-    })
 }
 
 /// Check if a prime is a "safe prime" (i.e., (p-1)/2 is also prime)
 fn is_safe_prime(p: &BoxedUint) -> bool {
     let one = BoxedUint::one_with_precision(p.bits_precision());
     let q = p.wrapping_sub(&one).shr(1);
-    is_probable_prime(&q, MR_SMALL_BASES.len())
+    is_probable_prime(&q, 7)
 }
 
 /// Generate a safe prime of the given bit length
@@ -260,7 +207,7 @@ fn generate_safe_prime<R: CryptoRng + ?Sized>(rng: &mut R, bits: usize) -> Boxed
             continue;
         }
 
-        if !is_probable_prime_with_rng(&q, 24, rng) {
+        if !is_probable_prime(&q, 5) {
             continue;
         }
 
@@ -268,7 +215,7 @@ fn generate_safe_prime<R: CryptoRng + ?Sized>(rng: &mut R, bits: usize) -> Boxed
         let one = BoxedUint::one_with_precision(bits as u32);
         let p = q_wide.shl(1).wrapping_add(&one);
 
-        if is_probable_prime_with_rng(&p, 24, rng) {
+        if is_probable_prime(&p, 7) {
             return p;
         }
     }
