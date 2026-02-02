@@ -13,9 +13,10 @@ license = "MIT"
 
 [dependencies]
 rand = "0.10.0-rc.8"
+rand_core = "=0.10.0-rc-6"
 rsa = { version = "0.10.0-rc.14", features = ["hazmat"] }
-crypto-bigint = "0.7.0-rc.24"
-digest = "0.11.0-rc.11"
+crypto-bigint = "0.7.0-rc.22"
+digest = "0.11.0-rc.9"
 hmac-sha256 = { version = "1.1.13", features = ["traits011"] }
 hmac-sha512 = { version = "1.1.9", features = ["traits011", "sha384"] }
 ct-codecs = "1"
