@@ -181,9 +181,4 @@ fn key_component_accessors() {
         // Each prime should be present
         assert!(!p.is_empty());
     }
-
-    // CRT parameters should be present after precompute
-    assert!(sk_components.dmp1().is_some());
-    assert!(sk_components.dmq1().is_some());
-    assert!(sk_components.iqmp().is_some());
 }

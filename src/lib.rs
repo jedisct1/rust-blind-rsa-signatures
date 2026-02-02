@@ -860,24 +860,6 @@ impl SecretKeyComponents<'_> {
             .map(|p| p.to_be_bytes().into_vec())
             .collect()
     }
-
-    /// Returns d mod (p-1) as big-endian bytes, if precomputed.
-    pub fn dmp1(&self) -> Option<Vec<u8>> {
-        use rsa::traits::PrivateKeyParts;
-        self.inner.dp().map(|v| v.to_be_bytes().into_vec())
-    }
-
-    /// Returns d mod (q-1) as big-endian bytes, if precomputed.
-    pub fn dmq1(&self) -> Option<Vec<u8>> {
-        use rsa::traits::PrivateKeyParts;
-        self.inner.dq().map(|v| v.to_be_bytes().into_vec())
-    }
-
-    /// Returns q^(-1) mod p as big-endian bytes, if precomputed.
-    pub fn iqmp(&self) -> Option<Vec<u8>> {
-        use rsa::traits::PrivateKeyParts;
-        self.inner.qinv().map(|v| v.retrieve().to_be_bytes().into_vec())
-    }
 }
 
 impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> SecretKey<H, S, M> {
