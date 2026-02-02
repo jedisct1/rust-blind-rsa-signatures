@@ -100,6 +100,40 @@ let pk = PublicKeySha384PSSRandomized::from_pem(&pem)?;
 let pk = PublicKeySha384PSSRandomized::from_spki(&spki)?;
 ```
 
+## Partially Blind RSA Signatures
+
+The `pbrsa` module implements Partially Blind RSA Signatures (IRTF CFRG draft), which allow a signer to bind signatures to public metadata while keeping the message content blind.
+
+```rust
+use blind_rsa_signatures::pbrsa::{PartiallyBlindKeyPair, DefaultRng};
+use blind_rsa_signatures::{Sha384, PSS, Randomized};
+
+// [SERVER]: Generate a key pair with safe primes (required for PBRSA)
+let kp = PartiallyBlindKeyPair::<Sha384, PSS, Randomized>::generate(&mut DefaultRng, 2048)?;
+
+// [SERVER]: Derive a key pair for specific metadata
+let metadata = b"2024-01-15";
+let derived_kp = kp.derive_key_pair_for_metadata(metadata)?;
+
+// [CLIENT]: Blind a message with metadata
+let msg = b"token-12345";
+let blinding_result = derived_kp.pk.blind(&mut DefaultRng, msg, Some(metadata))?;
+
+// [SERVER]: Sign the blinded message
+let blind_sig = derived_kp.sk.blind_sign(&blinding_result.blind_message)?;
+
+// [CLIENT]: Finalize to get the actual signature
+let sig = derived_kp.pk.finalize(&blind_sig, &blinding_result, msg, Some(metadata))?;
+
+// [ANYONE]: Verify the signature with metadata
+derived_kp.pk.verify(&sig, blinding_result.msg_randomizer, msg, Some(metadata))?;
+```
+
+Key differences from standard blind RSA:
+- Keys must use safe primes (p and q where (p-1)/2 and (q-1)/2 are also prime)
+- Signatures are bound to public metadata
+- Key derivation generates per-metadata key pairs
+
 ## For other languages
 
 * [Zig](https://github.com/jedisct1/zig-blind-rsa-signatures)
