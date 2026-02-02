@@ -738,7 +738,7 @@ impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> PublicKey<H, S, M> {
     ) -> Result<BlindingResult, Error> {
         let msg = msg.as_ref();
         let modulus_bytes = self.inner.size();
-        let modulus_bits = modulus_bytes * 8;
+        let modulus_bits = self.inner.n().as_ref().bits() as usize;
         let msg_randomizer = if M::RANDOMIZE {
             let mut noise = [0u8; 32];
             rng.fill_bytes(&mut noise[..]);
