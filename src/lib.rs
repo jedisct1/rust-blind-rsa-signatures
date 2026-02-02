@@ -57,14 +57,15 @@ use rsa::signature::hazmat::PrehashVerifier;
 use rsa::traits::PublicKeyParts as _;
 use rsa::{RsaPrivateKey, RsaPublicKey};
 
-mod blind_rsa;
+mod brsa;
 mod mgf1;
+pub mod pbrsa;
 
 mod private {
     pub trait Sealed {}
 }
 
-use blind_rsa::{blind as rsa_blind, unblind as rsa_unblind};
+use brsa::{blind as rsa_blind, unblind as rsa_unblind};
 use mgf1::mgf1_xor;
 
 #[cfg(feature = "serde")]
@@ -153,6 +154,9 @@ pub trait HashAlgorithm: Clone + Default {
         msg_hash: &[u8],
         sig: &rsa::pss::Signature,
     ) -> Result<(), rsa::signature::Error>;
+
+    /// HKDF key derivation for PBRSA
+    fn hkdf_expand(out: &mut [u8], salt: &[u8], ikm: &[u8], info: &[u8]);
 }
 
 /// SHA-256 hash algorithm
@@ -176,6 +180,11 @@ impl HashAlgorithm for Sha256 {
     ) -> Result<(), rsa::signature::Error> {
         rsa::pss::VerifyingKey::<Sha256Hash>::new_with_salt_len(pk.clone(), salt_len)
             .verify_prehash(msg_hash, sig)
+    }
+
+    fn hkdf_expand(out: &mut [u8], salt: &[u8], ikm: &[u8], info: &[u8]) {
+        let prk = hmac_sha256::HKDF::extract(salt, ikm);
+        hmac_sha256::HKDF::expand(out, prk, info);
     }
 }
 
@@ -201,6 +210,11 @@ impl HashAlgorithm for Sha384 {
         rsa::pss::VerifyingKey::<Sha384Hash>::new_with_salt_len(pk.clone(), salt_len)
             .verify_prehash(msg_hash, sig)
     }
+
+    fn hkdf_expand(out: &mut [u8], salt: &[u8], ikm: &[u8], info: &[u8]) {
+        let prk = hmac_sha512::sha384::HKDF::extract(salt, ikm);
+        hmac_sha512::sha384::HKDF::expand(out, prk, info);
+    }
 }
 
 /// SHA-512 hash algorithm
@@ -224,6 +238,11 @@ impl HashAlgorithm for Sha512 {
     ) -> Result<(), rsa::signature::Error> {
         rsa::pss::VerifyingKey::<Sha512Hash>::new_with_salt_len(pk.clone(), salt_len)
             .verify_prehash(msg_hash, sig)
+    }
+
+    fn hkdf_expand(out: &mut [u8], salt: &[u8], ikm: &[u8], info: &[u8]) {
+        let prk = hmac_sha512::HKDF::extract(salt, ikm);
+        hmac_sha512::HKDF::expand(out, prk, info);
     }
 }
 
