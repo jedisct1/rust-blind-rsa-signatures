@@ -54,7 +54,7 @@ use rsa::pkcs8::{
 };
 use rsa::rand_core::{CryptoRng, TryCryptoRng, TryRng};
 use rsa::signature::hazmat::PrehashVerifier;
-use rsa::traits::PublicKeyParts as _;
+use rsa::traits::{PrivateKeyParts, PublicKeyParts};
 use rsa::{RsaPrivateKey, RsaPublicKey};
 
 mod blind_rsa;
@@ -585,22 +585,17 @@ pub struct PublicKey<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> {
     _phantom: PhantomData<(H, S, M)>,
 }
 
-/// Provides access to the raw RSA public key components.
-pub struct PublicKeyComponents<'a> {
-    inner: &'a RsaPublicKey,
-}
-
-impl PublicKeyComponents<'_> {
-    /// Returns the modulus (n) as big-endian bytes.
-    pub fn n(&self) -> Vec<u8> {
-        use rsa::traits::PublicKeyParts;
-        self.inner.n().as_ref().to_be_bytes().into_vec()
+impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> PublicKeyParts for PublicKey<H, S, M> {
+    fn n(&self) -> &crypto_bigint::NonZero<BoxedUint> {
+        self.inner.n()
     }
 
-    /// Returns the public exponent (e) as big-endian bytes.
-    pub fn e(&self) -> Vec<u8> {
-        use rsa::traits::PublicKeyParts;
-        self.inner.e().to_be_bytes().into_vec()
+    fn e(&self) -> &BoxedUint {
+        self.inner.e()
+    }
+
+    fn n_params(&self) -> &crypto_bigint::modular::BoxedMontyParams {
+        self.inner.n_params()
     }
 }
 
@@ -610,11 +605,6 @@ impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> PublicKey<H, S, M> {
             inner,
             _phantom: PhantomData,
         }
-    }
-
-    /// Returns an accessor for the raw RSA key components.
-    pub fn components(&self) -> PublicKeyComponents<'_> {
-        PublicKeyComponents { inner: &self.inner }
     }
 
     fn salt_len() -> usize {
@@ -808,56 +798,49 @@ pub struct SecretKey<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> {
     _phantom: PhantomData<(H, S, M)>,
 }
 
-/// Provides access to the raw RSA secret key components.
-pub struct SecretKeyComponents<'a> {
-    inner: &'a RsaPrivateKey,
+impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> PublicKeyParts for SecretKey<H, S, M> {
+    fn n(&self) -> &crypto_bigint::NonZero<BoxedUint> {
+        self.inner.n()
+    }
+    fn e(&self) -> &BoxedUint {
+        self.inner.e()
+    }
+    fn n_params(&self) -> &crypto_bigint::modular::BoxedMontyParams {
+        self.inner.n_params()
+    }
 }
 
-impl SecretKeyComponents<'_> {
-    /// Returns the modulus (n) as big-endian bytes.
-    pub fn n(&self) -> Vec<u8> {
-        use rsa::traits::PublicKeyParts;
-        self.inner.n().as_ref().to_be_bytes().into_vec()
+impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> PrivateKeyParts for SecretKey<H, S, M> {
+    fn d(&self) -> &BoxedUint {
+        self.inner.d()
     }
 
-    /// Returns the public exponent (e) as big-endian bytes.
-    pub fn e(&self) -> Vec<u8> {
-        use rsa::traits::PublicKeyParts;
-        self.inner.e().to_be_bytes().into_vec()
+    fn primes(&self) -> &[BoxedUint] {
+        self.inner.primes()
     }
 
-    /// Returns the private exponent (d) as big-endian bytes.
-    pub fn d(&self) -> Vec<u8> {
-        use rsa::traits::PrivateKeyParts;
-        self.inner.d().to_be_bytes().into_vec()
+    fn dp(&self) -> Option<&BoxedUint> {
+        self.inner.dp()
     }
 
-    /// Returns the prime factors (p, q, ...) as big-endian bytes.
-    pub fn primes(&self) -> Vec<Vec<u8>> {
-        use rsa::traits::PrivateKeyParts;
-        self.inner
-            .primes()
-            .iter()
-            .map(|p| p.to_be_bytes().into_vec())
-            .collect()
+    fn dq(&self) -> Option<&BoxedUint> {
+        self.inner.dq()
     }
 
-    /// Returns d mod (p-1) as big-endian bytes, if precomputed.
-    pub fn dmp1(&self) -> Option<Vec<u8>> {
-        use rsa::traits::PrivateKeyParts;
-        self.inner.dp().map(|v| v.to_be_bytes().into_vec())
+    fn qinv(&self) -> Option<&crypto_bigint::modular::BoxedMontyForm> {
+        self.inner.qinv()
     }
 
-    /// Returns d mod (q-1) as big-endian bytes, if precomputed.
-    pub fn dmq1(&self) -> Option<Vec<u8>> {
-        use rsa::traits::PrivateKeyParts;
-        self.inner.dq().map(|v| v.to_be_bytes().into_vec())
+    fn crt_values(&self) -> Option<&[rsa::CrtValue]> {
+        self.inner.crt_values()
     }
 
-    /// Returns q^(-1) mod p as big-endian bytes, if precomputed.
-    pub fn iqmp(&self) -> Option<Vec<u8>> {
-        use rsa::traits::PrivateKeyParts;
-        self.inner.qinv().map(|v| v.retrieve().to_be_bytes().into_vec())
+    fn p_params(&self) -> Option<&crypto_bigint::modular::BoxedMontyParams> {
+        self.inner.p_params()
+    }
+
+    fn q_params(&self) -> Option<&crypto_bigint::modular::BoxedMontyParams> {
+        self.inner.q_params()
     }
 }
 
@@ -867,11 +850,6 @@ impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> SecretKey<H, S, M> {
             inner,
             _phantom: PhantomData,
         }
-    }
-
-    /// Returns an accessor for the raw RSA key components.
-    pub fn components(&self) -> SecretKeyComponents<'_> {
-        SecretKeyComponents { inner: &self.inner }
     }
 
     pub fn to_der(&self) -> Result<Vec<u8>, Error> {
