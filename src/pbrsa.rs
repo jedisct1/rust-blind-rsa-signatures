@@ -488,7 +488,7 @@ impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> PartiallyBlindPublicKey<H
             .map_err(|_| Error::EncodingError)?;
         // For PBRSA public keys, we allow non-standard exponents
         let modulus_bits = inner.size() * 8;
-        if !(2048..=4096).contains(&modulus_bits) {
+        if !(1024..=4096).contains(&modulus_bits) {
             return Err(Error::UnsupportedParameters);
         }
         Ok(Self::new(inner))
@@ -509,7 +509,7 @@ impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> PartiallyBlindPublicKey<H
             .or_else(|_| rsa::RsaPublicKey::from_pkcs1_pem(pem))
             .map_err(|_| Error::EncodingError)?;
         let modulus_bits = inner.size() * 8;
-        if !(2048..=4096).contains(&modulus_bits) {
+        if !(1024..=4096).contains(&modulus_bits) {
             return Err(Error::UnsupportedParameters);
         }
         Ok(Self::new(inner))
@@ -816,7 +816,7 @@ impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> PartiallyBlindSecretKey<H
             SecretKeyInner::Master(k) => {
                 let inner = RsaPublicKey::from(k);
                 let modulus_bits = inner.size() * 8;
-                if !(2048..=4096).contains(&modulus_bits) {
+                if !(1024..=4096).contains(&modulus_bits) {
                     return Err(Error::UnsupportedParameters);
                 }
                 Ok(PartiallyBlindPublicKey::new(inner))
@@ -899,7 +899,7 @@ impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> PartiallyBlindKeyPair<H, 
         rng: &mut R,
         modulus_bits: usize,
     ) -> Result<Self, Error> {
-        if !(2048..=4096).contains(&modulus_bits) || modulus_bits % 16 != 0 {
+        if !(1024..=4096).contains(&modulus_bits) || modulus_bits % 16 != 0 {
             return Err(Error::UnsupportedParameters);
         }
 
@@ -1102,7 +1102,7 @@ mod tests {
 
     #[test]
     fn test_derive_keypair() {
-        let kp = PartiallyBlindKeyPair::<Sha384, PSS, Randomized>::generate(&mut DefaultRng, 2048)
+        let kp = PartiallyBlindKeyPair::<Sha384, PSS, Randomized>::generate(&mut DefaultRng, 1024)
             .unwrap();
 
         let metadata = b"test-metadata";
@@ -1117,7 +1117,7 @@ mod tests {
 
     #[test]
     fn test_pbrsa_basic() {
-        let kp = PartiallyBlindKeyPair::<Sha384, PSS, Randomized>::generate(&mut DefaultRng, 2048)
+        let kp = PartiallyBlindKeyPair::<Sha384, PSS, Randomized>::generate(&mut DefaultRng, 1024)
             .unwrap();
 
         let metadata = b"test-metadata";
@@ -1148,7 +1148,7 @@ mod tests {
     #[test]
     fn test_pbrsa_deterministic() {
         let kp =
-            PartiallyBlindKeyPair::<Sha384, PSSZero, Deterministic>::generate(&mut DefaultRng, 2048)
+            PartiallyBlindKeyPair::<Sha384, PSSZero, Deterministic>::generate(&mut DefaultRng, 1024)
                 .unwrap();
 
         let metadata = b"metadata";
@@ -1180,7 +1180,7 @@ mod tests {
 
     #[test]
     fn test_pbrsa_no_metadata() {
-        let kp = PartiallyBlindKeyPair::<Sha384, PSS, Randomized>::generate(&mut DefaultRng, 2048)
+        let kp = PartiallyBlindKeyPair::<Sha384, PSS, Randomized>::generate(&mut DefaultRng, 1024)
             .unwrap();
 
         // Use master key directly without metadata derivation
