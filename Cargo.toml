@@ -16,9 +16,10 @@ rand = "0.10.0"
 rand_core = "0.10.0"
 rsa = { version = "0.10.0-rc.15", features = ["hazmat"] }
 crypto-bigint = "0.7.0-rc.27"
+crypto-primes = { version = "=0.7.0-pre.9", default-features = false }
 digest = "0.11.0"
 hmac-sha256 = { version = "1.1.13", features = ["traits011"] }
-hmac-sha512 = { version = "1.1.11", features = ["traits011", "sha384"] }
+hmac-sha512 = { version = "1.1.12", features = ["traits011", "sha384"] }
 ct-codecs = "1"
 derive-new = "0.7.0"
 derive_more = { version = "2.1.1", features = ["full"] }
