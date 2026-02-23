@@ -6,7 +6,7 @@
 
 Author-blinded RSASSA-PSS RSAE signatures.
 
-This is an implementation of the [RSA Blind Signatures](https://www.rfc-editor.org/rfc/rfc9474.html) (RFC 9474), based on [the Zig implementation](https://github.com/jedisct1/zig-rsa-blind-signatures).
+This is an implementation of the [RSA Blind Signatures](https://www.rfc-editor.org/rfc/rfc9474.html) (RFC 9474), ported from [the Zig implementation](https://github.com/jedisct1/zig-rsa-blind-signatures).
 
 ## Protocol overview
 
