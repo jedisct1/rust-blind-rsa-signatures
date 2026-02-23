@@ -937,7 +937,7 @@ impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> SecretKey<H, S, M> {
         let n_bits = self.inner.n().bits_precision();
         let blind_msg_uint = BoxedUint::from_be_slice(blind_msg.as_ref(), n_bits)
             .map_err(|_| Error::InternalError)?;
-        if &blind_msg_uint >= self.inner.n().as_ref() {
+        if blind_msg_uint >= self.inner.n().as_ref() {
             return Err(Error::UnsupportedParameters);
         }
         let blind_sig = rsa_decrypt_and_check(&self.inner, Some(rng), &blind_msg_uint)

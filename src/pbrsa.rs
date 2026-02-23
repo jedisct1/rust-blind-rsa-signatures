@@ -178,11 +178,11 @@ fn generate_safe_prime<R: CryptoRng + ?Sized>(rng: &mut R, bits: usize) -> Boxed
     let q_bits = bits - 1;
 
     loop {
-        let byte_len = (q_bits + 7) / 8;
+        let byte_len = q_bits.div_ceil(8);
         let mut bytes = vec![0u8; byte_len];
         rng.fill_bytes(&mut bytes);
 
-        if q_bits % 8 != 0 {
+        if !q_bits.is_multiple_of(8) {
             bytes[0] &= (1u8 << (q_bits % 8)) - 1;
         }
 
@@ -848,7 +848,7 @@ impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> PartiallyBlindSecretKey<H
         let n_bits = self.n().bits_precision();
         let blind_msg_uint = BoxedUint::from_be_slice(blind_msg.as_ref(), n_bits)
             .map_err(|_| Error::InternalError)?;
-        if &blind_msg_uint >= self.n() {
+        if blind_msg_uint >= self.n() {
             return Err(Error::UnsupportedParameters);
         }
 
@@ -899,7 +899,7 @@ impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> PartiallyBlindKeyPair<H, 
         rng: &mut R,
         modulus_bits: usize,
     ) -> Result<Self, Error> {
-        if !(1024..=4096).contains(&modulus_bits) || modulus_bits % 16 != 0 {
+        if !(1024..=4096).contains(&modulus_bits) || !modulus_bits.is_multiple_of(16) {
             return Err(Error::UnsupportedParameters);
         }
 
