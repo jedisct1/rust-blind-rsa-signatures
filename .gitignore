@@ -1,4 +1,5 @@
+.swival
 .vscode
-Cargo.lock
-/target
 *~
+/target
+Cargo.lock
