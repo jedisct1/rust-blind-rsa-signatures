@@ -615,6 +615,9 @@ impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> PartiallyBlindPublicKey<H
         if sig.len() != modulus_bytes {
             return Err(Error::UnsupportedParameters);
         }
+        if msg_randomizer.is_some() != M::RANDOMIZE {
+            return Err(Error::VerificationFailed);
+        }
         let sig_ =
             rsa::pss::Signature::try_from(sig.as_ref()).map_err(|_| Error::VerificationFailed)?;
         let salt_len = Self::salt_len();
