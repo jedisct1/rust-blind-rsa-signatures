@@ -1,6 +1,6 @@
 [package]
 name = "blind-rsa-signatures"
-version = "0.17.2"
+version = "0.18.0"
 authors = ["Frank Denis <github@pureftpd.org>"]
 edition = "2018"
 description = "RSA blind signatures (RFC 9474) in pure Rust for anonymous tokens and unlinkable authentication"
@@ -12,10 +12,10 @@ categories = ["cryptography"]
 license = "MIT"
 
 [dependencies]
-rand = "0.10.1"
+rand = "0.10.3"
 rand_core = "0.10.1"
 rsa = { version = "0.10.0-rc.18", features = ["hazmat"] }
-crypto-bigint = "0.7.3"
+crypto-bigint = "0.7.5"
 crypto-primes = { version = "=0.7.0", default-features = false }
 digest = "0.11.3"
 hmac-sha256 = { version = "1.1.14", features = ["traits011"] }
