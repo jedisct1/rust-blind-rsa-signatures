@@ -12,14 +12,14 @@ categories = ["cryptography"]
 license = "MIT"
 
 [dependencies]
-rand = "0.10.3"
+rand = "0.10.4"
 rand_core = "0.10.1"
-rsa = { version = "0.10.0-rc.18", features = ["hazmat"] }
-crypto-bigint = "0.7.5"
-crypto-primes = { version = "=0.7.0", default-features = false }
+rsa = { version = "0.10.0", features = ["hazmat"] }
+crypto-bigint = "0.7.11"
+crypto-primes = { version = "0.7.2", default-features = false }
 digest = "0.11.3"
-hmac-sha256 = { version = "1.1.14", features = ["traits011"] }
-hmac-sha512 = { version = "1.1.12", features = ["traits011", "sha384"] }
+hmac-sha256 = { version = "1.1.15", features = ["traits011"] }
+hmac-sha512 = { version = "1.1.13", features = ["traits011", "sha384"] }
 ct-codecs = "1"
 derive-new = "0.7.0"
 derive_more = { version = "2.1.1", features = ["full"] }

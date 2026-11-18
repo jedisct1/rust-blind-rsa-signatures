@@ -55,7 +55,7 @@ use rsa::pkcs8::{
 use rsa::rand_core::{CryptoRng, TryCryptoRng, TryRng};
 use rsa::signature::hazmat::PrehashVerifier;
 use rsa::traits::PublicKeyParts as _;
-use rsa::{RsaPrivateKey, RsaPublicKey};
+use rsa::{PrivateKey as RsaPrivateKey, PublicKey as RsaPublicKey};
 
 mod brsa;
 mod mgf1;
@@ -655,8 +655,8 @@ impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> PublicKey<H, S, M> {
         if der.len() > 800 {
             return Err(Error::EncodingError);
         }
-        let inner = rsa::RsaPublicKey::from_public_key_der(der)
-            .or_else(|_| rsa::RsaPublicKey::from_pkcs1_der(der))
+        let inner = RsaPublicKey::from_public_key_der(der)
+            .or_else(|_| RsaPublicKey::from_pkcs1_der(der))
             .map_err(|_| Error::EncodingError)?;
         check_rsa_parameters(&inner)?;
         Ok(Self::new(inner))
@@ -673,8 +673,8 @@ impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> PublicKey<H, S, M> {
             return Err(Error::EncodingError);
         }
         let pem = pem.trim();
-        let inner = rsa::RsaPublicKey::from_public_key_pem(pem)
-            .or_else(|_| rsa::RsaPublicKey::from_pkcs1_pem(pem))
+        let inner = RsaPublicKey::from_public_key_pem(pem)
+            .or_else(|_| RsaPublicKey::from_pkcs1_pem(pem))
             .map_err(|_| Error::EncodingError)?;
         check_rsa_parameters(&inner)?;
         Ok(Self::new(inner))
@@ -738,7 +738,7 @@ impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> PublicKey<H, S, M> {
     ) -> Result<BlindingResult, Error> {
         let msg = msg.as_ref();
         let modulus_bytes = self.inner.size();
-        let modulus_bits = self.inner.n().as_ref().bits() as usize;
+        let modulus_bits = self.inner.n().as_ref().bit_width() as usize;
         let msg_randomizer = if M::RANDOMIZE {
             let mut noise = [0u8; 32];
             rng.fill_bytes(&mut noise[..]);
@@ -886,8 +886,8 @@ impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> SecretKey<H, S, M> {
     }
 
     pub fn from_der(der: &[u8]) -> Result<Self, Error> {
-        let mut inner = rsa::RsaPrivateKey::from_pkcs8_der(der)
-            .or_else(|_| rsa::RsaPrivateKey::from_pkcs1_der(der))
+        let mut inner = RsaPrivateKey::from_pkcs8_der(der)
+            .or_else(|_| RsaPrivateKey::from_pkcs1_der(der))
             .map_err(|_| Error::EncodingError)?;
         inner.validate().map_err(|_| Error::InvalidKey)?;
         inner.precompute().map_err(|_| Error::InvalidKey)?;
@@ -904,8 +904,8 @@ impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> SecretKey<H, S, M> {
     }
 
     pub fn from_pem(pem: &str) -> Result<Self, Error> {
-        let mut inner = rsa::RsaPrivateKey::from_pkcs8_pem(pem)
-            .or_else(|_| rsa::RsaPrivateKey::from_pkcs1_pem(pem))
+        let mut inner = RsaPrivateKey::from_pkcs8_pem(pem)
+            .or_else(|_| RsaPrivateKey::from_pkcs1_pem(pem))
             .map_err(|_| Error::EncodingError)?;
         inner.validate().map_err(|_| Error::InvalidKey)?;
         inner.precompute().map_err(|_| Error::InvalidKey)?;

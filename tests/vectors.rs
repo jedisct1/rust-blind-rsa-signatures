@@ -3,6 +3,7 @@ use blind_rsa_signatures::{
     PSS,
 };
 use core::convert::TryFrom;
+use ct_codecs::{Decoder, Hex};
 use rsa::BoxedUint;
 use serde::{de::Error, Deserialize, Deserializer};
 use std::fs::File;
@@ -53,14 +54,10 @@ fn parse_usize<'a, D: Deserializer<'a>>(d: D) -> Result<usize, D::Error> {
     parse_uint(d).map(|b| usize::try_from(b.to_words().first().copied().unwrap_or(0)).unwrap())
 }
 
+// Decode the hex directly, so that empty values like a missing salt stay empty.
 fn parse_bytes<'a, D: Deserializer<'a>>(d: D) -> Result<Vec<u8>, D::Error> {
-    let mut s: String = Deserialize::deserialize(d)?;
-    if s.is_empty() {
-        s.push('0');
-    }
-    BoxedUint::from_str_radix_vartime(&s, 16)
-        .map(|b| b.to_be_bytes().to_vec())
-        .map_err(Error::custom)
+    let s: String = Deserialize::deserialize(d)?;
+    Hex::decode_to_vec(&s, None).map_err(Error::custom)
 }
 
 struct MockRandom(Vec<Vec<u8>>);
@@ -98,7 +95,7 @@ fn run_test<H: HashAlgorithm, S: SaltMode, M: MessagePrepare>(vector: &Vector) {
     });
 
     // Parse signing keys.
-    let inner = rsa::RsaPrivateKey::from_components(
+    let inner = rsa::PrivateKey::from_components(
         vector.n.clone(),
         vector.e.clone(),
         vector.d.clone(),

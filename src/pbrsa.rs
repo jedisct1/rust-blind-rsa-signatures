@@ -37,9 +37,11 @@
 
 use std::convert::TryFrom;
 use std::marker::PhantomData;
+use std::num::NonZeroU32;
 
-use crypto_bigint::modular::{BoxedMontyForm, BoxedMontyParams};
+use crypto_bigint::modular::{BoxedMontyForm, BoxedMontyParams, MontyParams};
 use crypto_bigint::{BoxedUint, Gcd, Integer, NonZero, Odd, Resize};
+use crypto_primes::hazmat::{random_odd_integer, SetBits};
 use digest::DynDigest;
 use rsa::hazmat::rsa_decrypt_and_check;
 use rsa::pkcs1::{DecodeRsaPrivateKey as _, DecodeRsaPublicKey as _};
@@ -49,7 +51,7 @@ use rsa::pkcs8::{
 use rsa::rand_core::CryptoRng;
 use rsa::traits::{PrivateKeyParts, PublicKeyParts};
 use rsa::CrtValue;
-use rsa::{RsaPrivateKey, RsaPublicKey};
+use rsa::{PrivateKey as RsaPrivateKey, PublicKey as RsaPublicKey};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -175,24 +177,13 @@ fn is_safe_prime(p: &BoxedUint) -> bool {
 /// Generate a safe prime of the given bit length
 /// Uses the approach: generate q, check if p = 2q + 1 is also prime
 fn generate_safe_prime<R: CryptoRng + ?Sized>(rng: &mut R, bits: usize) -> BoxedUint {
-    let q_bits = bits - 1;
+    let q_bits = NonZeroU32::new(bits as u32 - 1).expect("prime size is at least 512 bits");
 
     loop {
-        let byte_len = q_bits.div_ceil(8);
-        let mut bytes = vec![0u8; byte_len];
-        rng.fill_bytes(&mut bytes);
-
-        if !q_bits.is_multiple_of(8) {
-            bytes[0] &= (1u8 << (q_bits % 8)) - 1;
-        }
-
-        let mut q = BoxedUint::from_be_slice(&bytes, q_bits as u32)
-            .unwrap_or_else(|_| BoxedUint::zero_with_precision(q_bits as u32));
-
-        q = q.bitor(&BoxedUint::one_with_precision(q.bits_precision()));
-
-        let high_bit = BoxedUint::one_with_precision(q.bits_precision()).shl(q_bits as u32 - 1);
-        q = q.bitor(&high_bit);
+        // With the two top bits set, two of these primes always multiply into a full-size modulus.
+        let q = random_odd_integer::<BoxedUint, _>(rng, q_bits, SetBits::TwoMsb)
+            .expect("BoxedUint has no size limit")
+            .get();
 
         // Quick check: for p = 2q + 1 to be prime, q mod 3 must not be 1
         // (otherwise p = 2q + 1 ≡ 2*1 + 1 ≡ 0 mod 3)
@@ -333,12 +324,17 @@ struct PbrsaRawKey {
     n: NonZero<BoxedUint>,
     e: BoxedUint,
     d: BoxedUint,
-    primes: Vec<BoxedUint>,
+    primes: Vec<Odd<BoxedUint>>,
     n_params: BoxedMontyParams,
 }
 
 impl PbrsaRawKey {
-    fn new(n: BoxedUint, e: BoxedUint, d: BoxedUint, primes: Vec<BoxedUint>) -> Result<Self, Error> {
+    fn new(
+        n: BoxedUint,
+        e: BoxedUint,
+        d: BoxedUint,
+        primes: Vec<Odd<BoxedUint>>,
+    ) -> Result<Self, Error> {
         let n_odd = Odd::new(n.clone())
             .into_option()
             .ok_or(Error::InternalError)?;
@@ -373,8 +369,16 @@ impl PrivateKeyParts for PbrsaRawKey {
         &self.d
     }
 
-    fn primes(&self) -> &[BoxedUint] {
+    fn primes(&self) -> &[Odd<BoxedUint>] {
         &self.primes
+    }
+
+    fn p(&self) -> Option<&MontyParams<BoxedUint>> {
+        None
+    }
+
+    fn q(&self) -> Option<&MontyParams<BoxedUint>> {
+        None
     }
 
     fn dp(&self) -> Option<&BoxedUint> {
@@ -390,14 +394,6 @@ impl PrivateKeyParts for PbrsaRawKey {
     }
 
     fn crt_values(&self) -> Option<&[CrtValue]> {
-        None
-    }
-
-    fn p_params(&self) -> Option<&BoxedMontyParams> {
-        None
-    }
-
-    fn q_params(&self) -> Option<&BoxedMontyParams> {
         None
     }
 }
@@ -483,8 +479,8 @@ impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> PartiallyBlindPublicKey<H
         if der.len() > 800 {
             return Err(Error::EncodingError);
         }
-        let inner = rsa::RsaPublicKey::from_public_key_der(der)
-            .or_else(|_| rsa::RsaPublicKey::from_pkcs1_der(der))
+        let inner = RsaPublicKey::from_public_key_der(der)
+            .or_else(|_| RsaPublicKey::from_pkcs1_der(der))
             .map_err(|_| Error::EncodingError)?;
         // For PBRSA public keys, we allow non-standard exponents
         let modulus_bits = inner.size() * 8;
@@ -505,8 +501,8 @@ impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> PartiallyBlindPublicKey<H
             return Err(Error::EncodingError);
         }
         let pem = pem.trim();
-        let inner = rsa::RsaPublicKey::from_public_key_pem(pem)
-            .or_else(|_| rsa::RsaPublicKey::from_pkcs1_pem(pem))
+        let inner = RsaPublicKey::from_public_key_pem(pem)
+            .or_else(|_| RsaPublicKey::from_pkcs1_pem(pem))
             .map_err(|_| Error::EncodingError)?;
         let modulus_bits = inner.size() * 8;
         if !(1024..=4096).contains(&modulus_bits) {
@@ -539,7 +535,7 @@ impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> PartiallyBlindPublicKey<H
     ) -> Result<BlindingResult, Error> {
         let msg = msg.as_ref();
         let modulus_bytes = self.inner.size();
-        let modulus_bits = self.inner.n().as_ref().bits() as usize;
+        let modulus_bits = self.inner.n().as_ref().bit_width() as usize;
 
         let msg_randomizer = if M::RANDOMIZE {
             let mut noise = [0u8; 32];
@@ -650,7 +646,7 @@ enum SecretKeyInner {
         n: BoxedUint,
         e: BoxedUint,
         d: BoxedUint,
-        primes: Vec<BoxedUint>,
+        primes: Vec<Odd<BoxedUint>>,
     },
 }
 
@@ -709,7 +705,7 @@ impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> PartiallyBlindSecretKey<H
         }
     }
 
-    fn new_derived(n: BoxedUint, e: BoxedUint, d: BoxedUint, primes: Vec<BoxedUint>) -> Self {
+    fn new_derived(n: BoxedUint, e: BoxedUint, d: BoxedUint, primes: Vec<Odd<BoxedUint>>) -> Self {
         Self {
             inner: SecretKeyInner::Derived { n, e, d, primes },
             _phantom: PhantomData,
@@ -723,7 +719,7 @@ impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> PartiallyBlindSecretKey<H
         }
     }
 
-    fn primes(&self) -> &[BoxedUint] {
+    fn primes(&self) -> &[Odd<BoxedUint>] {
         match &self.inner {
             SecretKeyInner::Master(k) => {
                 use rsa::traits::PrivateKeyParts as _;
@@ -734,7 +730,7 @@ impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> PartiallyBlindSecretKey<H
     }
 
     fn size(&self) -> usize {
-        (self.n().bits() as usize).div_ceil(8)
+        (self.n().bit_width() as usize).div_ceil(8)
     }
 
     pub fn to_der(&self) -> Result<Vec<u8>, Error> {
@@ -751,8 +747,8 @@ impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> PartiallyBlindSecretKey<H
     }
 
     pub fn from_der(der: &[u8]) -> Result<Self, Error> {
-        let mut inner = rsa::RsaPrivateKey::from_pkcs8_der(der)
-            .or_else(|_| rsa::RsaPrivateKey::from_pkcs1_der(der))
+        let mut inner = RsaPrivateKey::from_pkcs8_der(der)
+            .or_else(|_| RsaPrivateKey::from_pkcs1_der(der))
             .map_err(|_| Error::EncodingError)?;
         inner.validate().map_err(|_| Error::InvalidKey)?;
         inner.precompute().map_err(|_| Error::InvalidKey)?;
@@ -789,8 +785,8 @@ impl<H: HashAlgorithm, S: SaltMode, M: MessagePrepare> PartiallyBlindSecretKey<H
     }
 
     pub fn from_pem(pem: &str) -> Result<Self, Error> {
-        let mut inner = rsa::RsaPrivateKey::from_pkcs8_pem(pem)
-            .or_else(|_| rsa::RsaPrivateKey::from_pkcs1_pem(pem))
+        let mut inner = RsaPrivateKey::from_pkcs8_pem(pem)
+            .or_else(|_| RsaPrivateKey::from_pkcs1_pem(pem))
             .map_err(|_| Error::EncodingError)?;
         inner.validate().map_err(|_| Error::InvalidKey)?;
         inner.precompute().map_err(|_| Error::InvalidKey)?;
@@ -1051,12 +1047,10 @@ pub type PartiallyBlindKeyPairSha384PSSZeroDeterministic =
 mod tests {
     use super::*;
     use crate::to_bytes_be_padded;
+    use ct_codecs::{Decoder, Hex};
 
     fn hex_to_bytes(hex: &str) -> Vec<u8> {
-        (0..hex.len())
-            .step_by(2)
-            .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
-            .collect()
+        Hex::decode_to_vec(hex, None).unwrap()
     }
 
     #[test]
@@ -1096,109 +1090,51 @@ mod tests {
             _ => panic!("Expected derived key"),
         }
 
-        let msg = b"hello world";
-        let blinding_result = derived_kp.pk.blind(&mut DefaultRng, msg, Some(metadata)).unwrap();
-        let blind_sig = derived_kp.sk.blind_sign(&blinding_result.blind_message).unwrap();
-        let sig = derived_kp.pk.finalize(&blind_sig, &blinding_result, msg, Some(metadata)).unwrap();
-        derived_kp.pk.verify(&sig, blinding_result.msg_randomizer, msg, Some(metadata)).unwrap();
+        sign_and_verify(&derived_kp, Some(metadata));
+    }
+
+    fn generate_key_pair<S: SaltMode, M: MessagePrepare>() -> PartiallyBlindKeyPair<Sha384, S, M>
+    where
+        PartiallyBlindPublicKey<Sha384, S, M>: PartialEq + std::fmt::Debug,
+    {
+        let kp = PartiallyBlindKeyPair::generate(&mut DefaultRng, 1024).unwrap();
+
+        // Generated keys must have the full size, or rsa won't load the public key back.
+        assert_eq!(kp.pk.inner.n().as_ref().bit_width(), 1024);
+        let der = kp.pk.to_der().unwrap();
+        let pem = kp.pk.to_pem().unwrap();
+        assert_eq!(PartiallyBlindPublicKey::from_der(&der).unwrap(), kp.pk);
+        assert_eq!(PartiallyBlindPublicKey::from_pem(&pem).unwrap(), kp.pk);
+        kp
+    }
+
+    fn sign_and_verify<S: SaltMode, M: MessagePrepare>(
+        kp: &PartiallyBlindKeyPair<Sha384, S, M>,
+        meta: Option<&[u8]>,
+    ) {
+        let (pk, msg) = (&kp.pk, b"hello world");
+        let blinded = pk.blind(&mut DefaultRng, msg, meta).unwrap();
+        assert_eq!(blinded.msg_randomizer.is_some(), M::RANDOMIZE);
+        let blind_sig = kp.sk.blind_sign(&blinded.blind_message).unwrap();
+        let sig = pk.finalize(&blind_sig, &blinded, msg, meta).unwrap();
+        pk.verify(&sig, blinded.msg_randomizer, msg, meta).unwrap();
     }
 
     #[test]
-    fn test_derive_keypair() {
-        let kp = PartiallyBlindKeyPair::<Sha384, PSS, Randomized>::generate(&mut DefaultRng, 1024)
-            .unwrap();
+    fn test_pbrsa_randomized() {
+        let kp = generate_key_pair::<PSS, Randomized>();
+        sign_and_verify(&kp, None);
 
         let metadata = b"test-metadata";
         let derived_kp = kp.derive_key_pair_for_metadata(metadata).unwrap();
-
-        let msg = b"test message";
-        let blinding_result = derived_kp.pk.blind(&mut DefaultRng, msg, Some(metadata)).unwrap();
-        let blind_sig = derived_kp.sk.blind_sign(&blinding_result.blind_message).unwrap();
-        let sig = derived_kp.pk.finalize(&blind_sig, &blinding_result, msg, Some(metadata)).unwrap();
-        derived_kp.pk.verify(&sig, blinding_result.msg_randomizer, msg, Some(metadata)).unwrap();
-    }
-
-    #[test]
-    fn test_pbrsa_basic() {
-        let kp = PartiallyBlindKeyPair::<Sha384, PSS, Randomized>::generate(&mut DefaultRng, 1024)
-            .unwrap();
-
-        let metadata = b"test-metadata";
-        let derived_kp = kp.derive_key_pair_for_metadata(metadata).unwrap();
-
-        let msg = b"hello world";
-        let blinding_result = derived_kp
-            .pk
-            .blind(&mut DefaultRng, msg, Some(metadata))
-            .unwrap();
-
-        let blind_sig = derived_kp
-            .sk
-            .blind_sign(&blinding_result.blind_message)
-            .unwrap();
-
-        let sig = derived_kp
-            .pk
-            .finalize(&blind_sig, &blinding_result, msg, Some(metadata))
-            .unwrap();
-
-        derived_kp
-            .pk
-            .verify(&sig, blinding_result.msg_randomizer, msg, Some(metadata))
-            .unwrap();
+        sign_and_verify(&derived_kp, Some(metadata));
     }
 
     #[test]
     fn test_pbrsa_deterministic() {
-        let kp =
-            PartiallyBlindKeyPair::<Sha384, PSSZero, Deterministic>::generate(&mut DefaultRng, 1024)
-                .unwrap();
-
+        let kp = generate_key_pair::<PSSZero, Deterministic>();
         let metadata = b"metadata";
         let derived_kp = kp.derive_key_pair_for_metadata(metadata).unwrap();
-
-        let msg = b"test message";
-        let blinding_result = derived_kp
-            .pk
-            .blind(&mut DefaultRng, msg, Some(metadata))
-            .unwrap();
-
-        assert!(blinding_result.msg_randomizer.is_none());
-
-        let blind_sig = derived_kp
-            .sk
-            .blind_sign(&blinding_result.blind_message)
-            .unwrap();
-
-        let sig = derived_kp
-            .pk
-            .finalize(&blind_sig, &blinding_result, msg, Some(metadata))
-            .unwrap();
-
-        derived_kp
-            .pk
-            .verify(&sig, None, msg, Some(metadata))
-            .unwrap();
-    }
-
-    #[test]
-    fn test_pbrsa_no_metadata() {
-        let kp = PartiallyBlindKeyPair::<Sha384, PSS, Randomized>::generate(&mut DefaultRng, 1024)
-            .unwrap();
-
-        // Use master key directly without metadata derivation
-        let msg = b"hello world";
-        let blinding_result = kp.pk.blind(&mut DefaultRng, msg, None).unwrap();
-
-        let blind_sig = kp.sk.blind_sign(&blinding_result.blind_message).unwrap();
-
-        let sig = kp
-            .pk
-            .finalize(&blind_sig, &blinding_result, msg, None)
-            .unwrap();
-
-        kp.pk
-            .verify(&sig, blinding_result.msg_randomizer, msg, None)
-            .unwrap();
+        sign_and_verify(&derived_kp, Some(metadata));
     }
 }
