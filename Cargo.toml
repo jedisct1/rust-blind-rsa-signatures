@@ -6,7 +6,6 @@ edition = "2018"
 description = "RSA blind signatures (RFC 9474) in pure Rust for anonymous tokens and unlinkable authentication"
 readme = "README.md"
 keywords = ["rsa", "blind", "signatures", "privacy", "rfc9474"]
-homepage = "https://github.com/jedisct1/rust-blind-rsa-signatures"
 repository = "https://github.com/jedisct1/rust-blind-rsa-signatures"
 categories = ["cryptography"]
 license = "MIT"
